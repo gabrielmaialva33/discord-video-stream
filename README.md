@@ -38,7 +38,7 @@ What I implemented and what I did not.
 #### Extras
 
 - [x] Figure out rtp header extensions (discord specific) (discord seems to use one-byte RTP header
-  extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
+      extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
 
 Extensions supported by Discord (taken from the webrtc sdp exchange)
 
@@ -76,8 +76,8 @@ npm install discord.js-selfbot-v13@latest
 Create a new client, and patch its events to listen for voice gateway events:
 
 ```typescript
-import {Client} from 'discord.js-selfbot-v13'
-import {Streamer} from '@dank074/discord-video-stream'
+import { Client } from 'discord.js-selfbot-v13'
+import { Streamer } from '@dank074/discord-video-stream'
 
 const streamer = new Streamer(new Client())
 await streamer.client.login('TOKEN HERE')
@@ -97,14 +97,14 @@ Start sending media over the udp connection:
 udp.mediaConnection.setSpeaking(true)
 udp.mediaConnection.setVideoStatus(true)
 try {
-    const res = await streamLivestreamVideo('DIRECT VIDEO URL OR READABLE STREAM HERE', udp)
+  const res = await streamLivestreamVideo('DIRECT VIDEO URL OR READABLE STREAM HERE', udp)
 
-    console.log('Finished playing video ' + res)
+  console.log('Finished playing video ' + res)
 } catch (e) {
-    console.log(e)
+  console.log(e)
 } finally {
-    udp.mediaConnection.setSpeaking(false)
-    udp.mediaConnection.setVideoStatus(false)
+  udp.mediaConnection.setSpeaking(false)
+  udp.mediaConnection.setVideoStatus(false)
 }
 ```
 
