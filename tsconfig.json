@@ -3,6 +3,7 @@
   "compilerOptions": {
     "rootDir": "./",
     "outDir": "./dist",
+    "declaration": true,
     "strictPropertyInitialization": false,
     "paths": {
       "#src/*": ["./src/*.js"]
