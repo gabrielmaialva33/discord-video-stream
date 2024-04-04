@@ -1,6 +1,6 @@
 {
   "name": "@gabrielmaialva33/discord-video-stream",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Experiment for making video streaming work for discord self bots",
   "keywords": [
     "discord",
@@ -21,17 +21,7 @@
   "homepage": "https://github.com/gabrielmaialva33/discord-video-stream#readme",
   "type": "module",
   "main": "dist/index.js",
-  "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "engines": {
     "node": ">=20.12.1"
   },
