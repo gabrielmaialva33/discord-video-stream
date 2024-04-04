@@ -1,5 +1,5 @@
 import { BaseMediaPacketizer, MAX_INT16BIT, streamOpts } from '#src/client/index'
-import { MediaUdp } from '#src/client/voice/index'
+import { MediaUdp } from '#src/client/index'
 
 /**
  * VP8 payload format

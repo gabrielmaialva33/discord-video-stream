@@ -4,7 +4,7 @@ import prism from 'prism-media'
 
 import { StreamOutput } from '@dank074/fluent-ffmpeg-multistream-ts'
 
-import { MediaUdp } from '#src/client/voice/index'
+import { MediaUdp } from '#src/client/index'
 import { VideoStream } from '#src/media/video_stream'
 import { streamOpts } from '#src/client/index'
 import { H264NalSplitter, IvfTransformer } from '#src/client/processing/index'
