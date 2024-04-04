@@ -1,5 +1,5 @@
-import { MediaUdp } from '../voice'
-import { BaseMediaPacketizer } from './base_media_packetizer'
+import { MediaUdp } from '#src/client/voice/media_udp'
+import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
 
 const FRAME_SIZE = (48000 / 100) * 2
 

@@ -1,3 +1,3 @@
-export * from './client/index'
-export * from './media/index'
-export * as Utils from './utils'
+export * from '#src/client/index'
+export * from '#src/media/index'
+export * from '#src/utils'

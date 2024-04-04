@@ -3,17 +3,15 @@ import { isIPv4 } from 'node:net'
 
 import {
   AudioPacketizer,
+  BaseMediaConnection,
   BaseMediaPacketizer,
   MAX_INT32BIT,
+  streamOpts,
   VideoPacketizerH264,
   VideoPacketizerH265,
   VideoPacketizerVP8,
-} from '../packet'
-
-import { streamOpts } from '../stream_opts'
-import { BaseMediaConnection } from './base_media_connection'
-
-import { normalizeVideoCodec } from '../../utils'
+} from '#src/client/index'
+import { normalizeVideoCodec } from '#src/utils'
 
 // credit to discord.js
 function parseLocalPacket(message: Buffer) {
@@ -34,6 +32,7 @@ export class MediaUdp {
   private _nonce: number
   private _socket: udpCon.Socket
   private readonly _mediaConnection: BaseMediaConnection
+  private readonly _videoPacketizer: BaseMediaPacketizer
 
   constructor(voiceConnection: BaseMediaConnection) {
     this._nonce = 0
@@ -76,8 +75,6 @@ export class MediaUdp {
   get audioPacketizer(): BaseMediaPacketizer {
     return this._audioPacketizer
   }
-
-  private _videoPacketizer: BaseMediaPacketizer
 
   get videoPacketizer(): BaseMediaPacketizer {
     return this._videoPacketizer

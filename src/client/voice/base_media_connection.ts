@@ -1,11 +1,10 @@
 import WebSocket from 'ws'
 
-import { MediaUdp } from './media_udp'
+import { MediaUdp } from '#src/client/voice/media_udp'
+import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
 
-import { VoiceOpCodes } from './voice_op_codes'
-import { streamOpts } from '../stream_opts'
-
-import { normalizeVideoCodec } from '../../utils.js'
+import { streamOpts } from '#src/client/index'
+import { normalizeVideoCodec } from '#src/utils'
 
 type VoiceConnectionStatus = {
   hasSession: boolean

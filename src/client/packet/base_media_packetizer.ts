@@ -1,5 +1,6 @@
 import { crypto_secretbox_easy } from 'libsodium-wrappers'
-import { MediaUdp } from '../voice'
+
+import { MediaUdp } from '#src/client/voice/media_udp'
 
 export const MAX_INT16BIT = 2 ** 16
 

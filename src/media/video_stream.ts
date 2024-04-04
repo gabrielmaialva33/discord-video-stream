@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream'
 
-import { MediaUdp } from '../client'
+import { MediaUdp } from '#src/client/voice/index'
 
 export class VideoStream extends Writable {
   udp: MediaUdp

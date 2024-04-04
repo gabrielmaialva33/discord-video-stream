@@ -1,5 +1,10 @@
 import { Transform, TransformCallback } from 'node:stream'
-import { type AnnexBHelpers, H264Helpers, H264NalUnitTypes, H265Helpers } from './annex_bhelper'
+import {
+  AnnexBHelpers,
+  H264Helpers,
+  H264NalUnitTypes,
+  H265Helpers,
+} from '#src/client/processing/annex_bhelper'
 
 const emptyBuffer = Buffer.allocUnsafe(0)
 const epbPrefix = Buffer.from([0x00, 0x00, 0x03])

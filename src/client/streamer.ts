@@ -1,7 +1,7 @@
 import { Client } from 'discord.js-selfbot-v13'
 
-import { GatewayOpCodes } from './gateway_op_codes'
-import { MediaUdp, StreamConnection, VoiceConnection } from './voice'
+import { MediaUdp, StreamConnection, VoiceConnection } from '#src/client/voice/index'
+import { GatewayOpCodes } from '#src/client/gateway_op_codes'
 
 export class Streamer {
   constructor(client: Client) {

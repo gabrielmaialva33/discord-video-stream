@@ -19,12 +19,15 @@
     "url": "https://github.com/gabrielmaialva33/discord-video-stream/issues"
   },
   "homepage": "https://github.com/gabrielmaialva33/discord-video-stream#readme",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "private": true,
+  "type": "module",
   "files": [
     "dist",
     "src"
   ],
+  "engines": {
+    "node": ">=20.12.1"
+  },
   "scripts": {
     "build": "tsc",
     "lint": "eslint . --ext=.ts",

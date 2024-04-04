@@ -1,7 +1,7 @@
-import { streamOpts } from '../stream_opts'
-import { MediaUdp } from '../voice'
-import { BaseMediaPacketizer } from './base_media_packetizer'
-import { type AnnexBHelpers, H264Helpers, H265Helpers } from '../processing/annex_bhelper'
+import { streamOpts } from '#src/client/stream_opts'
+import { MediaUdp } from '#src/client/voice/media_udp'
+import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
+import { type AnnexBHelpers, H264Helpers, H265Helpers } from '#src/client/processing/annex_bhelper'
 
 /**
  * Annex B format

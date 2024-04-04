@@ -4,11 +4,11 @@ import prism from 'prism-media'
 
 import { StreamOutput } from '@dank074/fluent-ffmpeg-multistream-ts'
 
-import { MediaUdp, streamOpts } from '../client'
-import { VideoStream } from './video_stream'
-import { AudioStream } from './audio_stream'
-
-import { H264NalSplitter, IvfTransformer } from '../client/processing'
+import { MediaUdp } from '#src/client/voice/index'
+import { VideoStream } from '#src/media/video_stream'
+import { streamOpts } from '#src/client/index'
+import { H264NalSplitter, IvfTransformer } from '#src/client/processing/index'
+import { AudioStream } from '#src/media/audio_stream'
 
 export let command: ffmpeg.FfmpegCommand | undefined
 
