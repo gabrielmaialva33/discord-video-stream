@@ -32,15 +32,12 @@
     "build/src/utils.d.ts"
   ],
   "type": "module",
-  "types": "build/src/index.d.ts",
   "exports": {
-    ".": {
-      "import": "./build/src/index.js",
-      "require": "./build/src/index.js"
-    },
+    ".": "./build/src/index.js",
     "./client": "./build/src/client/index.js",
     "./media": "./build/src/media/index.js",
-    "./utils": "./build/src/utils.js"
+    "./utils": "./build/src/utils.js",
+    "./types": "./build/src/index.d.ts"
   },
   "engines": {
     "node": ">=20.12.1"
