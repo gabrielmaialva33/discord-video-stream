@@ -41,6 +41,9 @@
     "./utils": "./build/src/utils.js",
     "./types": "./build/src/index.d.ts"
   },
+  "imports": {
+    "#src/*": "./src/*.js"
+  },
   "engines": {
     "node": ">=20.12.1"
   },
