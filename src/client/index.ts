@@ -1,5 +1,7 @@
 export * from '#src/client/packet/index'
 export * from '#src/client/voice/index'
-export * from '#src/client/streamer'
+export * from '#src/client/processing/index'
+
 export * from '#src/client/gateway_op_codes'
+export * from '#src/client/streamer'
 export * from '#src/client/stream_opts'
