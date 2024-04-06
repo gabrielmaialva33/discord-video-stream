@@ -28,7 +28,7 @@
   "type": "module",
   "exports": {
     ".": "./build/src/index.js",
-    "./src": "./build/src/index.js",
+    "./src": "./build/src/index.js"
   },
   "imports": {
     "#src/*": "./src/*.js"
