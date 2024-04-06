@@ -1,6 +1,6 @@
 {
   "name": "@gabrielmaialva33/discord-video-stream",
-  "version": "0.3.5",
+  "version": "0.3.8",
   "description": "Experiment for making video streaming work for discord self bots",
   "keywords": [
     "discord",
@@ -19,7 +19,7 @@
     "url": "https://github.com/gabrielmaialva33/discord-video-stream/issues"
   },
   "homepage": "https://github.com/gabrielmaialva33/discord-video-stream#readme",
-  "main": "build/src/index.js",
+  "main": "./build/src/index.js",
   "files": [
     "build/src",
     "build/src/client",
