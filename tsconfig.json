@@ -7,6 +7,5 @@
     "paths": {
       "#src/*": ["./src/*.js"]
     }
-  },
-  "exclude": ["node_modules", "build", "examples"]
+  }
 }
