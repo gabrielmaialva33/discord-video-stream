@@ -1,6 +1,6 @@
 {
   "name": "@gabrielmaialva33/discord-video-stream",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Experiment for making video streaming work for discord self bots",
   "keywords": [
     "discord",
@@ -35,8 +35,12 @@
   "types": "build/src/index.d.ts",
   "exports": {
     ".": "./build/src/index.js",
-    "./client": "./build/src/client/index.js",
-    "./media": "./build/src/media/index.js"
+    "./src/client": "./build/src/client/index.js",
+    "./src/media": "./build/src/media/index.js",
+    "./src/utils": "./build/src/utils.js"
+  },
+  "imports": {
+    "#src/*": "./src/*.{js}"
   },
   "engines": {
     "node": ">=20.12.1"
@@ -53,9 +57,6 @@
     "extends": "@adonisjs/eslint-config/package"
   },
   "prettier": "@adonisjs/prettier-config",
-  "imports": {
-    "#src/*": "./src/*.{js,json}"
-  },
   "dependencies": {
     "@dank074/fluent-ffmpeg-multistream-ts": "^1.0.2",
     "@discordjs/opus": "^0.9.0",
