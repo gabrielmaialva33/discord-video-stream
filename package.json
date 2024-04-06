@@ -26,7 +26,7 @@
     "build/src/media"
   ],
   "type": "module",
-  "types": "dist/src/index.d.ts",
+  "types": "build/src/index.d.ts",
   "exports": {
     ".": "./build/src/index.js",
     "./client": "./build/src/client/index.js",
