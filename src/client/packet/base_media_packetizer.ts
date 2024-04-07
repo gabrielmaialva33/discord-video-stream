@@ -1,5 +1,7 @@
 import * as libsodium from 'libsodium-wrappers'
 
+const { crypto_secretbox_easy } = libsodium
+
 import { MediaUdp } from '#src/client/voice/media_udp'
 
 export const MAX_INT16BIT = 2 ** 16
@@ -163,11 +165,7 @@ export class BaseMediaPacketizer {
     const nonceBuffer = this._mediaUdp.getNewNonceBuffer()
     return Buffer.concat([
       packetHeader,
-      libsodium.crypto_secretbox_easy(
-        senderReport,
-        nonceBuffer,
-        this._mediaUdp.mediaConnection.secretkey
-      ),
+      crypto_secretbox_easy(senderReport, nonceBuffer, this._mediaUdp.mediaConnection.secretkey),
       nonceBuffer.subarray(0, 4),
     ])
   }
@@ -226,10 +224,6 @@ export class BaseMediaPacketizer {
 
   // rtp header extensions and payload headers are also encrypted
   encryptData(message: string | Uint8Array, nonceBuffer: Buffer): Uint8Array {
-    return libsodium.crypto_secretbox_easy(
-      message,
-      nonceBuffer,
-      this._mediaUdp.mediaConnection.secretkey
-    )
+    return crypto_secretbox_easy(message, nonceBuffer, this._mediaUdp.mediaConnection.secretkey)
   }
 }
