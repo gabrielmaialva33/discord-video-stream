@@ -253,22 +253,19 @@ export class VideoPacketizerH265 extends VideoPacketizerAnnexB {
     isLastPacket: boolean,
     naluHeader: Buffer
   ): Buffer {
-    const fuIndicatorHeader = Buffer.allocUnsafe(3)
-    naluHeader.copy(fuIndicatorHeader)
-    const nalType = H265Helpers.getUnitType(naluHeader)
+    const fuPayloadHeader = Buffer.alloc(2) // Reuse if possible
+    const nalType = H264Helpers.getUnitType(naluHeader)
+    const fnri = naluHeader[0] & 0xe0
 
-    // clear NAL type and set it to 49
-    fuIndicatorHeader[0] = (fuIndicatorHeader[0] & 0b10000001) | (49 << 1)
+    fuPayloadHeader[0] = 0x1c | fnri // Type 28 with FNRI from original frame
+    fuPayloadHeader[1] = nalType // NAL type
 
-    // set fu header
     if (isFirstPacket) {
-      fuIndicatorHeader[2] = 0x80 | nalType // set start bit
+      fuPayloadHeader[1] |= 0x80 // Set start bit
     } else if (isLastPacket) {
-      fuIndicatorHeader[2] = 0x40 | nalType // set last bit
-    } else {
-      fuIndicatorHeader[2] = nalType // no start or end bit
+      fuPayloadHeader[1] |= 0x40 // Set end bit
     }
 
-    return fuIndicatorHeader
+    return fuPayloadHeader
   }
 }
