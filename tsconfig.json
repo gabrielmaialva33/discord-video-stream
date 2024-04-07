@@ -3,6 +3,8 @@
   "compilerOptions": {
     "rootDir": "./",
     "outDir": "./build",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "strictPropertyInitialization": false,
     "paths": {
       "#src/*": ["./src/*.js"]
