@@ -121,8 +121,8 @@ export class MediaUdp {
     })
   }
 
-  handleIncoming(buf: any): void {
-    console.log('incoming packet', buf)
+  handleIncoming(_buf: any): void {
+    //console.log('incoming packet', buf)
   }
 
   stop(): void {
