@@ -19,7 +19,7 @@ export class Streamer {
     return this._voiceConnection
   }
 
-  private _client: Client
+  private readonly _client: Client
 
   get client(): Client {
     return this._client

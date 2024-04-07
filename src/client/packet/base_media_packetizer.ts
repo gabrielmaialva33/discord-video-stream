@@ -1,24 +1,25 @@
 import { crypto_secretbox_easy } from 'libsodium-wrappers'
-
 import { MediaUdp } from '#src/client/voice/media_udp'
 
 export const MAX_INT16BIT = 2 ** 16
-
 export const MAX_INT32BIT = 2 ** 32
 
 const ntpEpoch = new Date('Jan 01 1900 GMT').getTime()
 
 export class BaseMediaPacketizer {
-  private readonly _payloadType: number
+  protected readonly _payloadType: number
   private _sequence: number
-  private _timestamp: number
+  protected _timestamp: number
   private _totalBytes: number
   private _totalPackets: number
   private _prevTotalPackets: number
-  private _lastPacketTime: number
-  private readonly _extensionEnabled: boolean
-  private readonly _mtu: number
+  protected _lastPacketTime: number
+  protected readonly _extensionEnabled: boolean
+  private readonly _mtu: number = 1200
   private readonly _mediaUdp: MediaUdp
+  protected readonly _packetHeaderBuffer: Buffer = Buffer.alloc(12)
+  private readonly _senderReportHeader: Buffer = Buffer.allocUnsafe(8)
+  private readonly _senderReportBody: Buffer = Buffer.allocUnsafe(20)
 
   constructor(connection: MediaUdp, payloadType: number, extensionEnabled = false) {
     this._mediaUdp = connection
@@ -27,14 +28,14 @@ export class BaseMediaPacketizer {
     this._timestamp = 0
     this._totalBytes = 0
     this._prevTotalPackets = 0
-    this._mtu = 1200
     this._extensionEnabled = extensionEnabled
-
     this._ssrc = 0
     this._srInterval = 512 // Sane fallback value for interval
+    this._lastPacketTime = 0
   }
 
   private _ssrc: number
+  private _srInterval: number
 
   get ssrc(): number {
     return this._ssrc
@@ -49,12 +50,6 @@ export class BaseMediaPacketizer {
     return this._mtu
   }
 
-  private _srInterval: number
-
-  /**
-   * The interval (number of packets) between 2 consecutive RTCP Sender
-   * Report packets
-   */
   get srInterval(): number {
     return this._srInterval
   }
@@ -73,15 +68,12 @@ export class BaseMediaPacketizer {
   }
 
   onFrameSent(packetsSent: number, bytesSent: number): void {
-    this._totalPackets = this._totalPackets + packetsSent
+    this._totalPackets += packetsSent
     this._totalBytes = (this._totalBytes + bytesSent) % MAX_INT32BIT
 
-    // Not using modulo here, since the number of packet sent might not be
-    // exactly a multiple of the interval
     if (
-      Math.floor(this._totalPackets / this._srInterval) -
-        Math.floor(this._prevTotalPackets / this._srInterval) >
-      0
+      Math.floor(this._totalPackets / this._srInterval) >
+      Math.floor(this._prevTotalPackets / this._srInterval)
     ) {
       const senderReport = this.makeRtcpSenderReport()
       this._mediaUdp.sendPacket(senderReport)
@@ -89,24 +81,11 @@ export class BaseMediaPacketizer {
     }
   }
 
-  /**
-   * Partitions a buffer into chunks of length this.mtu
-   * @param data buffer to be partitioned
-   * @returns array of chunks
-   */
   partitionDataMTUSizedChunks(data: Buffer): Buffer[] {
-    let i = 0
-    let len = data.length
-
     const out = []
-
-    while (len > 0) {
-      const size = Math.min(len, this._mtu)
-      out.push(data.subarray(i, i + size))
-      len -= size
-      i += size
+    for (let i = 0; i < data.length; i += this._mtu) {
+      out.push(data.subarray(i, Math.min(i + this._mtu, data.length)))
     }
-
     return out
   }
 
@@ -120,106 +99,65 @@ export class BaseMediaPacketizer {
   }
 
   makeRtpHeader(isLastPacket: boolean = true): Buffer {
-    const packetHeader = Buffer.alloc(12)
+    const header = this._packetHeaderBuffer
+    header.fill(0)
 
-    packetHeader[0] = (2 << 6) | ((this._extensionEnabled ? 1 : 0) << 4) // set version and flags
-    packetHeader[1] = this._payloadType // set packet payload
-    if (isLastPacket) packetHeader[1] |= 0b10000000 // mark M bit if last frame
+    header[0] = (2 << 6) | ((this._extensionEnabled ? 1 : 0) << 4) // set version and flags
+    header[1] = this._payloadType // set packet payload
+    if (isLastPacket) header[1] |= 0b10000000 // mark M bit if last frame
+    // header[1] |= 0x80; // mark M bit if last frame
 
-    packetHeader.writeUIntBE(this.getNewSequence(), 2, 2)
-    packetHeader.writeUIntBE(this._timestamp, 4, 4)
-    packetHeader.writeUIntBE(this._ssrc, 8, 4)
-    return packetHeader
+    // write sequence number
+    header.writeUIntBE(this.getNewSequence(), 2, 2)
+    header.writeUIntBE(this._timestamp, 4, 4)
+    header.writeUIntBE(this._ssrc, 8, 4)
+
+    return header
   }
 
-  // encrypts all data that is not in rtp header.
-
   makeRtcpSenderReport(): Buffer {
-    const packetHeader = Buffer.allocUnsafe(8)
+    const header = this._senderReportHeader
+    header[0] = 0x80 // RFC1889 v2, no padding, no reception report count
+    header[1] = 0xc8 // Type: Sender Report (200)
+    header[2] = 0x00 // Packet length (always 0x06 for some reason)
+    header[3] = 0x06
+    header.writeUInt32BE(this._ssrc, 4)
 
-    packetHeader[0] = 0x80 // RFC1889 v2, no padding, no reception report count
-    packetHeader[1] = 0xc8 // Type: Sender Report (200)
-
-    // Packet length (always 0x06 for some reason)
-    packetHeader[2] = 0x00
-    packetHeader[3] = 0x06
-    packetHeader.writeUInt32BE(this._ssrc, 4)
-
-    const senderReport = Buffer.allocUnsafe(20)
-
-    // Convert from floating point to 32.32 fixed point
-    // Convert each part separately to reduce precision loss
-    const ntpTimestamp = (this._lastPacketTime - ntpEpoch) / 1000
+    const body = this._senderReportBody
+    const ntpTimestamp = (Date.now() - ntpEpoch) / 1000
     const ntpTimestampMsw = Math.floor(ntpTimestamp)
     const ntpTimestampLsw = Math.round((ntpTimestamp - ntpTimestampMsw) * MAX_INT32BIT)
 
-    senderReport.writeUInt32BE(ntpTimestampMsw, 0)
-    senderReport.writeUInt32BE(ntpTimestampLsw, 4)
-    senderReport.writeUInt32BE(this._timestamp, 8)
-    senderReport.writeUInt32BE(this._totalPackets % MAX_INT32BIT, 12)
-    senderReport.writeUInt32BE(this._totalBytes, 16)
+    body.writeUInt32BE(ntpTimestampMsw, 0)
+    body.writeUInt32BE(ntpTimestampLsw, 4)
+    body.writeUInt32BE(this._timestamp, 8)
+    body.writeUInt32BE(this._totalPackets % MAX_INT32BIT, 12)
+    body.writeUInt32BE(this._totalBytes, 16)
 
     const nonceBuffer = this._mediaUdp.getNewNonceBuffer()
     return Buffer.concat([
-      packetHeader,
-      crypto_secretbox_easy(senderReport, nonceBuffer, this._mediaUdp.mediaConnection.secretkey),
+      header,
+      crypto_secretbox_easy(body, nonceBuffer, this._mediaUdp.mediaConnection.secretkey),
       nonceBuffer.subarray(0, 4),
     ])
   }
 
-  /**
-   * Creates a single extension of type playout-delay
-   * Discord seems to send this extension on every video packet
-   * @see https://webrtc.googlesource.com/src/+/refs/heads/main/docs/native-code/rtp-hdrext/playout-delay
-   * @returns playout-delay extension @type Buffer
-   */
   createHeaderExtension(): Buffer {
-    const extensions = [{ id: 5, len: 2, val: 0 }]
-
-    /**
-         *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-         |      defined by profile       |           length              |
-         +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-         */
+    // Assuming fixed-size and fixed-value extensions for simplicity
+    const extensionSize = 4 // Size for one extension
     const profile = Buffer.alloc(4)
     profile[0] = 0xbe
     profile[1] = 0xde
-    profile.writeInt16BE(extensions.length, 2) // extension count
+    profile.writeInt16BE(1, 2) // extension count
 
-    const extensionsData = []
-    for (let ext of extensions) {
-      /**
-       * EXTENSION DATA - each extension payload is 32 bits
-       */
-      const data = Buffer.alloc(4)
+    const extensionData = Buffer.alloc(extensionSize)
+    extensionData[0] = (5 << 4) | 1 // ID=5, len=2
+    // No specific value, just an example
+    extensionData.writeInt16BE(0, 2) // ext.val = 0
 
-      /**
-             *  0 1 2 3 4 5 6 7
-             +-+-+-+-+-+-+-+-+
-             |  ID   |  len  |
-             +-+-+-+-+-+-+-+-+
-
-             where len = actual length - 1
-             */
-      data[0] = (ext.id & 0b00001111) << 4
-      data[0] |= (ext.len - 1) & 0b00001111
-
-      /**  Specific to type playout-delay
-             *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4
-             +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-             |       MIN delay       |       MAX delay       |
-             +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-             */
-      data.writeUIntBE(ext.val, 1, 2) // not quite but its 0 anyway
-
-      extensionsData.push(data)
-    }
-
-    return Buffer.concat([profile, ...extensionsData])
+    return Buffer.concat([profile, extensionData])
   }
 
-  // rtp header extensions and payload headers are also encrypted
   encryptData(message: string | Uint8Array, nonceBuffer: Buffer): Uint8Array {
     return crypto_secretbox_easy(message, nonceBuffer, this._mediaUdp.mediaConnection.secretkey)
   }
