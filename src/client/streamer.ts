@@ -156,7 +156,7 @@ export class Streamer {
       }
       case 'STREAM_SERVER_UPDATE': {
         const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log('STREAM_SERVER_UPDATE', type, guildId, channelId, userId)
+        console.log('stream server update', type, guildId, channelId, userId)
         if (this.voiceConnection?.guildId !== guildId) return
 
         if (userId === this.client.user!.id) {

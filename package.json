@@ -1,6 +1,6 @@
 {
   "name": "@gabrielmaialva33/discord-video-stream",
-  "version": "0.6.9",
+  "version": "0.7.0",
   "description": "Experiment for making video streaming work for discord self bots",
   "keywords": [
     "discord",
@@ -74,8 +74,8 @@
     "@types/libsodium-wrappers": "^0.7.13",
     "@types/node": "^20.12.5",
     "@types/ws": "^8.5.10",
-    "eslint": "^9.0.0",
-    "prettier": "^3.2.5",
+    "eslint": "^8.0.0",
+    "prettier": "^3.2.5p",
     "typescript": "^5.4.4"
   },
   "peerDependencies": {

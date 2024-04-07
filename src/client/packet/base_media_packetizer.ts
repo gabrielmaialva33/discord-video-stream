@@ -67,9 +67,8 @@ export class BaseMediaPacketizer {
     return this._mediaUdp
   }
 
-  sendFrame(frame: any): void {
+  sendFrame(_frame: any): void {
     // override this
-    console.log('sendFrame', frame)
     this._lastPacketTime = Date.now()
   }
 

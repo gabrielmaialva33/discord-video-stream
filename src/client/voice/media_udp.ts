@@ -19,9 +19,7 @@ function parseLocalPacket(message: Buffer) {
 
   const ip = packet.subarray(8, packet.indexOf(0, 8)).toString('utf8')
 
-  if (!isIPv4(ip)) {
-    throw new Error('Malformed IP address')
-  }
+  if (!isIPv4(ip)) throw new Error('Malformed IP address')
 
   const port = packet.readUInt16BE(packet.length - 2)
 
@@ -70,7 +68,7 @@ export class MediaUdp {
     this._ready = val
   }
 
-  private _audioPacketizer: BaseMediaPacketizer
+  private readonly _audioPacketizer: BaseMediaPacketizer
 
   get audioPacketizer(): BaseMediaPacketizer {
     return this._audioPacketizer
@@ -108,10 +106,10 @@ export class MediaUdp {
           packet.length,
           this._mediaConnection.port,
           this._mediaConnection.address,
-          (error, bytes) => {
-            console.log('sent packet', error, bytes)
+          (error, _bytes) => {
+            //console.log('sent packet', error, bytes)
             if (error) {
-              console.log('ERROR', error)
+              console.log('error sending packet', error)
               reject(error)
             }
             resolve()
@@ -124,7 +122,7 @@ export class MediaUdp {
   }
 
   handleIncoming(buf: any): void {
-    console.log('RECEIVED PACKET', buf)
+    console.log('incoming packet', buf)
   }
 
   stop(): void {
