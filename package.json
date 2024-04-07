@@ -1,6 +1,6 @@
 {
   "name": "@gabrielmaialva33/discord-video-stream",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Experiment for making video streaming work for discord self bots",
   "keywords": [
     "discord",
@@ -71,11 +71,11 @@
     "@adonisjs/prettier-config": "^1.3.0",
     "@adonisjs/tsconfig": "^1.3.0",
     "@types/fluent-ffmpeg": "^2.1.24",
-    "@types/libsodium-wrappers": "^0.7.13",
+    "@types/libsodium-wrappers": "^0.7.14",
     "@types/node": "^20.12.5",
     "@types/ws": "^8.5.10",
-    "eslint": "^8.0.0",
-    "prettier": "^3.2.5p",
+    "eslint": "^9.0.0",
+    "prettier": "^3.2.5",
     "typescript": "^5.4.4"
   },
   "peerDependencies": {
