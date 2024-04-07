@@ -1,5 +1,4 @@
-import * as libsodium from 'libsodium-wrappers'
-
+import libsodium from 'libsodium-wrappers'
 const { crypto_secretbox_easy } = libsodium
 
 import { MediaUdp } from '#src/client/voice/media_udp'
