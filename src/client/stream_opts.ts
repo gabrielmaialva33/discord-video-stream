@@ -9,7 +9,7 @@ export interface StreamOpts {
 }
 
 export const streamOpts: StreamOpts = {
-  width: 1080,
+  width: 1280,
   height: 720,
   fps: 30,
   bitrateKbps: 1000,
