@@ -68,10 +68,10 @@ export interface StreamOptions {
 
 const defaultStreamOptions: StreamOptions = {
   width: 1080,
-  height: 720,
+  height: 1920,
   fps: 30,
-  bitrateKbps: 1000,
-  maxBitrateKbps: 2500,
+  bitrateKbps: 3000,
+  maxBitrateKbps: 8000,
   hardwareAcceleratedDecoding: false,
   videoCodec: 'H264',
   readAtNativeFps: true,

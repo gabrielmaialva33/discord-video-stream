@@ -7,6 +7,7 @@ export const MAX_INT32BIT = 2 ** 32
 const ntpEpoch = new Date('Jan 01 1900 GMT').getTime()
 
 await _sodium.ready
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const crypto_secretbox_easy = _sodium.crypto_secretbox_easy
 
 export class BaseMediaPacketizer {
