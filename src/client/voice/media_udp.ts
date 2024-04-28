@@ -97,21 +97,21 @@ export class MediaUdp {
     this.videoPacketizer.sendFrame(frame)
   }
 
-  sendPacket(packet: any): Promise<void> {
+  sendPacket(packet: Buffer): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       try {
-        this._socket.send(
+        this._socket?.send(
           packet,
           0,
           packet.length,
-          this._mediaConnection.port,
-          this._mediaConnection.address,
+          this._mediaConnection.port!,
+          this._mediaConnection.address!,
           (error, _bytes) => {
-            //console.log('sent packet', error, bytes)
             if (error) {
-              console.log('error sending packet', error)
+              console.log('ERROR', error)
               reject(error)
             }
+
             resolve()
           }
         )
@@ -147,32 +147,28 @@ export class MediaUdp {
         }
         try {
           const packet = parseLocalPacket(message)
-
-          this._mediaConnection.self_ip = packet.ip
-          this._mediaConnection.self_port = packet.port
-          this._mediaConnection.setProtocols()
+          this._mediaConnection.setProtocols(packet.ip, packet.port)
         } catch (e) {
           reject(e)
         }
 
         resolve()
-        this._socket.on('message', this.handleIncoming)
+        this._socket!.on('message', this.handleIncoming)
       })
 
       const blank = Buffer.alloc(74)
 
       blank.writeUInt16BE(1, 0)
       blank.writeUInt16BE(70, 2)
-      blank.writeUInt32BE(this._mediaConnection.ssrc, 4)
+      blank.writeUInt32BE(this._mediaConnection.ssrc!, 4)
 
       this._socket.send(
         blank,
         0,
         blank.length,
-        this._mediaConnection.port,
-        this._mediaConnection.address,
-        (error, bytes) => {
-          console.log('sent blank packet', error, bytes)
+        this._mediaConnection.port!,
+        this._mediaConnection.address!,
+        (error, _bytes) => {
           if (error) {
             reject(error)
           }

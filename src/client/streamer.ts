@@ -1,9 +1,12 @@
 import { Client } from 'discord.js-selfbot-v13'
 
-import { MediaUdp, StreamConnection, VoiceConnection } from '#src/client/voice/index'
+import { MediaUdp, StreamConnection, StreamOptions, VoiceConnection } from '#src/client/voice/index'
 import { GatewayOpCodes } from '#src/client/gateway_op_codes'
 
 export class Streamer {
+  private _voiceConnection?: VoiceConnection
+  private readonly _client: Client
+
   constructor(client: Client) {
     this._client = client
 
@@ -13,16 +16,12 @@ export class Streamer {
     })
   }
 
-  private _voiceConnection?: VoiceConnection
+  get client(): Client {
+    return this._client
+  }
 
   get voiceConnection(): VoiceConnection | undefined {
     return this._voiceConnection
-  }
-
-  private readonly _client: Client
-
-  get client(): Client {
-    return this._client
   }
 
   sendOpcode(code: number, data: any): void {
@@ -33,12 +32,21 @@ export class Streamer {
     })
   }
 
-  joinVoice(guild_id: string, channel_id: string): Promise<MediaUdp> {
-    return new Promise<MediaUdp>((resolve, _reject) => {
+  joinVoice(
+    guild_id: string,
+    channel_id: string,
+    options?: Partial<StreamOptions>
+  ): Promise<MediaUdp> {
+    return new Promise<MediaUdp>((resolve, reject) => {
+      if (!this.client.user) {
+        reject('Client not logged in')
+        return
+      }
       this._voiceConnection = new VoiceConnection(
         guild_id,
-        this.client.user!.id,
+        this.client.user.id,
         channel_id,
+        options ?? {},
         (voiceUdp) => {
           resolve(voiceUdp)
         }
@@ -47,16 +55,24 @@ export class Streamer {
     })
   }
 
-  createStream(): Promise<MediaUdp> {
+  createStream(options?: Partial<StreamOptions>): Promise<MediaUdp> {
     return new Promise<MediaUdp>((resolve, reject) => {
-      if (!this.voiceConnection) reject('cannot start stream without first joining voice channel')
+      if (!this.client.user) {
+        reject('Client not logged in')
+        return
+      }
+      if (!this.voiceConnection) {
+        reject('cannot start stream without first joining voice channel')
+        return
+      }
 
-      this.signalStream(this.voiceConnection!.guildId, this.voiceConnection!.channelId)
+      this.signalStream(this.voiceConnection.guildId, this.voiceConnection.channelId)
 
-      this.voiceConnection!.streamConnection = new StreamConnection(
-        this.voiceConnection!.guildId,
-        this.client.user!.id,
-        this.voiceConnection!.channelId,
+      this.voiceConnection.streamConnection = new StreamConnection(
+        this.voiceConnection.guildId,
+        this.client.user.id,
+        this.voiceConnection.channelId,
+        options ?? {},
         (voiceUdp) => {
           resolve(voiceUdp)
         }
@@ -142,7 +158,7 @@ export class Streamer {
       }
       case 'STREAM_CREATE': {
         const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log('STREAM_CREATE', type, guildId, channelId, userId)
+        console.log({ type, guildId, channelId, userId })
 
         if (this.voiceConnection?.guildId !== guildId) return
 
@@ -150,13 +166,14 @@ export class Streamer {
           this.voiceConnection!.streamConnection!.serverId = data.rtc_server_id
 
           this.voiceConnection!.streamConnection!.streamKey = data.stream_key
-          this.voiceConnection!.streamConnection!.setSession(this.voiceConnection!.session_id)
+          this.voiceConnection!.streamConnection!.setSession(this.voiceConnection!.session_id!)
         }
         break
       }
       case 'STREAM_SERVER_UPDATE': {
         const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log('stream server update', type, guildId, channelId, userId)
+        console.log({ type, guildId, channelId, userId })
+
         if (this.voiceConnection?.guildId !== guildId) return
 
         if (userId === this.client.user!.id) {

@@ -1,9 +1,7 @@
 import WebSocket from 'ws'
 
-import { MediaUdp } from '#src/client/voice/media_udp'
-import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
-
-import { streamOpts } from '#src/client/index'
+import { MediaUdp, VoiceOpCodes } from '#src/index'
+import { ReadyMessage, SessionMessage } from '#src/client/voice/voice_message_types'
 import { normalizeVideoCodec } from '#src/utils'
 
 type VoiceConnectionStatus = {
@@ -13,32 +11,100 @@ type VoiceConnectionStatus = {
   resuming: boolean
 }
 
+export type SupportedVideoCodec = 'H264' | 'H265' | 'VP8' | 'VP9' | 'AV1'
+
+export interface StreamOptions {
+  /**
+   * Video output width
+   */
+  width: number
+  /**
+   * Video output height
+   */
+  height: number
+  /**
+   * Video output frames per second
+   */
+  fps: number
+  /**
+   * Video output bitrate in kbps
+   */
+  bitrateKbps: number
+  maxBitrateKbps: number
+  /**
+   * Enables hardware accelerated video decoding. Enabling this option might result in an exception
+   * being thrown by Ffmpeg process if your system does not support hardware acceleration
+   */
+  hardwareAcceleratedDecoding: boolean
+  /**
+   * Output video codec. **Only** supports H264, H265, and VP8 currently
+   */
+  videoCodec: SupportedVideoCodec
+  /**
+   * Ffmpeg will read frames at native framerate. Disabling this make ffmpeg read frames as
+   * fast as possible and `setTimeout` will be used to control output fps instead. Enabling this
+   * can result in certain streams having video/audio out of sync (see https://github.com/dank074/Discord-video-stream/issues/52)
+   */
+  readAtNativeFps: boolean
+  /**
+   * Enables sending RTCP sender reports. Helps the receiver synchronize the audio/video frames, except in some weird
+   * cases which is why you can disable it
+   */
+  rtcpSenderReportEnabled: boolean
+  /**
+   * Encoding preset for H264 or H265. The faster it is, the lower the quality
+   */
+  h26xPreset:
+    | 'ultrafast'
+    | 'superfast'
+    | 'veryfast'
+    | 'faster'
+    | 'fast'
+    | 'medium'
+    | 'slow'
+    | 'slower'
+    | 'veryslow'
+}
+
+const defaultStreamOptions: StreamOptions = {
+  width: 1080,
+  height: 720,
+  fps: 30,
+  bitrateKbps: 1000,
+  maxBitrateKbps: 2500,
+  hardwareAcceleratedDecoding: false,
+  videoCodec: 'H264',
+  readAtNativeFps: true,
+  rtcpSenderReportEnabled: true,
+  h26xPreset: 'ultrafast',
+}
+
 export abstract class BaseMediaConnection {
+  private interval: NodeJS.Timeout | null = null
   udp: MediaUdp
   guildId: string
   channelId: string
   botId: string
-  ws: WebSocket
+  ws: WebSocket | null = null
   ready: (udp: MediaUdp) => void
   status: VoiceConnectionStatus
-  server: string //websocket url
-  token: string
-  session_id: string
-  self_ip: string
-  self_port: number
-  address: string
-  port: number
-  ssrc: number
-  videoSsrc: number
-  rtxSsrc: number
-  modes: string[]
-  secretkey: Uint8Array
-  private interval: NodeJS.Timeout
+  server: string | null = null // websocket url
+  token: string | null = null
+  session_id: string | null = null
+  address: string | null = null
+  port: number | null = null
+  ssrc: number | null = null
+  videoSsrc: number | null = null
+  rtxSsrc: number | null = null
+  modes: string[] | null = null
+  secretkey: Uint8Array | null = null
+  private _streamOptions: StreamOptions
 
   constructor(
     guildId: string,
     botId: string,
     channelId: string,
+    options: Partial<StreamOptions>,
     callback: (udp: MediaUdp) => void
   ) {
     this.status = {
@@ -47,6 +113,8 @@ export abstract class BaseMediaConnection {
       started: false,
       resuming: false,
     }
+
+    this._streamOptions = { ...defaultStreamOptions, ...options }
 
     // make udp client
     this.udp = new MediaUdp(this)
@@ -57,10 +125,18 @@ export abstract class BaseMediaConnection {
     this.ready = callback
   }
 
-  abstract get serverId(): string
+  abstract get serverId(): string | null
+
+  get streamOptions(): StreamOptions {
+    return this._streamOptions
+  }
+
+  set streamOptions(options: Partial<StreamOptions>) {
+    this._streamOptions = { ...this._streamOptions, ...options }
+  }
 
   stop(): void {
-    clearInterval(this.interval)
+    this.interval && clearInterval(this.interval)
     this.status.started = false
     this.ws?.close()
     this.udp?.stop()
@@ -121,7 +197,7 @@ export abstract class BaseMediaConnection {
     }
   }
 
-  handleReady(d: any): void {
+  handleReady(d: ReadyMessage): void {
     this.ssrc = d.ssrc
     this.address = d.ip
     this.port = d.port
@@ -133,7 +209,7 @@ export abstract class BaseMediaConnection {
     this.udp.videoPacketizer.ssrc = this.videoSsrc
   }
 
-  handleSession(d: any): void {
+  handleSession(d: SessionMessage): void {
     this.secretkey = new Uint8Array(d.secret_key)
 
     this.ready(this.udp)
@@ -141,7 +217,7 @@ export abstract class BaseMediaConnection {
   }
 
   setupEvents(): void {
-    this.ws.on('message', (data: any) => {
+    this.ws?.on('message', (data: any) => {
       const { op, d } = JSON.parse(data)
 
       if (op === VoiceOpCodes.READY) {
@@ -179,7 +255,7 @@ export abstract class BaseMediaConnection {
   }
 
   sendOpcode(code: number, data: any): void {
-    this.ws.send(
+    this.ws?.send(
       JSON.stringify({
         op: code,
         d: data,
@@ -214,13 +290,13 @@ export abstract class BaseMediaConnection {
    ** Uses vp8 for video
    ** Uses opus for audio
    */
-  setProtocols(): void {
+  setProtocols(ip: string, port: number): void {
     this.sendOpcode(VoiceOpCodes.SELECT_PROTOCOL, {
       protocol: 'udp',
       codecs: [
         { name: 'opus', type: 'audio', priority: 1000, payload_type: 120 },
         {
-          name: normalizeVideoCodec(streamOpts.video_codec || 'h264'),
+          name: normalizeVideoCodec(this.streamOptions.videoCodec),
           type: 'video',
           priority: 1000,
           payload_type: 101,
@@ -232,8 +308,8 @@ export abstract class BaseMediaConnection {
         //{ name: "VP9", type: "video", priority: 3000, payload_type: 105, rtx_payload_type: 106 },
       ],
       data: {
-        address: this.self_ip,
-        port: this.self_port,
+        address: ip,
+        port: port,
         mode: 'xsalsa20_poly1305_lite',
       },
     })
@@ -257,12 +333,12 @@ export abstract class BaseMediaConnection {
           active: true,
           quality: 100,
           rtx_ssrc: bool ? this.rtxSsrc : 0,
-          max_bitrate: (streamOpts.maxBitrateKbps || 4000) * 1000,
-          max_framerate: streamOpts.fps,
+          max_bitrate: this.streamOptions.maxBitrateKbps * 1000,
+          max_framerate: this.streamOptions.fps,
           max_resolution: {
             type: 'fixed',
-            width: streamOpts.width,
-            height: streamOpts.height,
+            width: this.streamOptions.width,
+            height: this.streamOptions.height,
           },
         },
       ],

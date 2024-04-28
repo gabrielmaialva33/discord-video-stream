@@ -6,11 +6,9 @@ export const MAX_INT32BIT = 2 ** 32
 
 const ntpEpoch = new Date('Jan 01 1900 GMT').getTime()
 
-// let sodium = _sodium
-// await (async () => {
-//   await _sodium.ready
-//   sodium = _sodium
-// })()
+await _sodium.ready
+const crypto_secretbox_easy = _sodium.crypto_secretbox_easy
+
 export class BaseMediaPacketizer {
   protected readonly _payloadType: number
   private _sequence: number
@@ -142,7 +140,7 @@ export class BaseMediaPacketizer {
     const nonceBuffer = this._mediaUdp.getNewNonceBuffer()
     return Buffer.concat([
       header,
-      _sodium.crypto_secretbox_easy(body, nonceBuffer, this._mediaUdp.mediaConnection.secretkey),
+      crypto_secretbox_easy(body, nonceBuffer, this._mediaUdp.mediaConnection.secretkey!),
       nonceBuffer.subarray(0, 4),
     ])
   }
@@ -164,10 +162,6 @@ export class BaseMediaPacketizer {
   }
 
   encryptData(message: string | Uint8Array, nonceBuffer: Buffer): Uint8Array {
-    return _sodium.crypto_secretbox_easy(
-      message,
-      nonceBuffer,
-      this._mediaUdp.mediaConnection.secretkey
-    )
+    return crypto_secretbox_easy(message, nonceBuffer, this._mediaUdp.mediaConnection.secretkey!)
   }
 }
