@@ -6,7 +6,6 @@ import {
   BaseMediaConnection,
   BaseMediaPacketizer,
   MAX_INT32BIT,
-  streamOpts,
   VideoPacketizerH264,
   VideoPacketizerH265,
   VideoPacketizerVP8,
@@ -38,7 +37,7 @@ export class MediaUdp {
     this._mediaConnection = voiceConnection
     this._audioPacketizer = new AudioPacketizer(this)
 
-    const videoCodec = normalizeVideoCodec(streamOpts.video_codec || 'H264')
+    const videoCodec = normalizeVideoCodec(this.mediaConnection.streamOptions.videoCodec || 'H264')
     switch (videoCodec) {
       case 'H264':
         this._videoPacketizer = new VideoPacketizerH264(this)

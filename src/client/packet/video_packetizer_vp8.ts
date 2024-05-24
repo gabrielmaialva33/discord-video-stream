@@ -1,4 +1,4 @@
-import { BaseMediaPacketizer, MAX_INT16BIT, MediaUdp, streamOpts } from '#src/client/index'
+import { BaseMediaPacketizer, MAX_INT16BIT, MediaUdp } from '#src/client/index'
 
 /**
  * VP8 payload format
@@ -10,7 +10,7 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
   constructor(connection: MediaUdp) {
     super(connection, 0x65, true)
     this._pictureId = 0
-    this.srInterval = 5 * (streamOpts.fps || 30) * 3 // ~5 seconds, assuming ~3 packets per frame
+    this.srInterval = 5 * (connection.mediaConnection.streamOptions.fps || 30) * 3 // ~5 seconds, assuming ~3 packets per frame
   }
 
   override sendFrame(frame: Buffer): void {
@@ -48,7 +48,7 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
   override onFrameSent(packetsSent: number, bytesSent: number): void {
     super.onFrameSent(packetsSent, bytesSent)
     // video RTP packet timestamp incremental value = 90,000Hz / fps
-    this.incrementTimestamp(90000 / (streamOpts.fps || 30))
+    this.incrementTimestamp(90000 / (this.mediaUdp.mediaConnection.streamOptions.fps || 30))
     this.incrementPictureId()
   }
 

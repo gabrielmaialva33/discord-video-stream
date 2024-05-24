@@ -1,4 +1,3 @@
-import { streamOpts } from '#src/client/stream_opts'
 import { MediaUdp } from '#src/client/voice/media_udp'
 import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
 import { type AnnexBHelpers, H264Helpers, H265Helpers } from '#src/client/processing/annex_bhelper'
@@ -57,7 +56,7 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
 
   constructor(connection: MediaUdp) {
     super(connection, 0x65, true)
-    this.srInterval = 5 * (streamOpts.fps || 30) * 3 // ~5 seconds, assuming ~3 packets per frame
+    this.srInterval = 5 * (connection.mediaConnection.streamOptions.fps || 30) * 3 // ~5 seconds, assuming ~3 packets per frame
   }
 
   /**
@@ -138,7 +137,7 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
   override onFrameSent(packetsSent: number, bytesSent: number): void {
     super.onFrameSent(packetsSent, bytesSent)
     // video RTP packet timestamp incremental value = 90,000Hz / fps
-    this.incrementTimestamp(90000 / (streamOpts.fps || 30))
+    this.incrementTimestamp(90000 / (this.mediaUdp.mediaConnection.streamOptions.fps || 30))
   }
 
   protected makeFragmentationUnitHeader(
