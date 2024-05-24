@@ -41,7 +41,10 @@
     }
   },
   "imports": {
-    "#src/*": "./build/src/*.js"
+    "#src/*": "./build/src/*.js",
+    "#src/client/*": "./build/src/client/*.js",
+    "#src/media/*": "./build/src/media/*.js",
+    "#src/util/*": "./build/src/util/*.js"
   },
   "engines": {
     "node": ">=20.13.1"
