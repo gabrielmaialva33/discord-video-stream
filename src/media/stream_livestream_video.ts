@@ -9,6 +9,8 @@ import { AudioStream, VideoStream } from '#src/media/index'
 import { StreamOutput } from '@dank074/fluent-ffmpeg-multistream-ts'
 import { normalizeVideoCodec } from '#src/utils'
 
+export let command: ffmpeg.FfmpegCommand
+
 export function streamLivestreamVideo(
   input: string | Readable,
   mediaUdp: MediaUdp,
@@ -61,7 +63,7 @@ export function streamLivestreamVideo(
       }
 
       try {
-        const command = ffmpeg(input)
+        command = ffmpeg(input)
           .addOption('-loglevel', '0')
           .addOption('-fflags', 'nobuffer')
           .addOption('-analyzeduration', '0')
