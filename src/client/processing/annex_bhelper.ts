@@ -86,7 +86,9 @@ export enum H265NalUnitTypes {
 
 export interface AnnexBHelpers {
   getUnitType(frame: Buffer): number
+
   splitHeader(frame: Buffer): [Buffer, Buffer]
+
   isAUD(unitType: number): boolean
 }
 

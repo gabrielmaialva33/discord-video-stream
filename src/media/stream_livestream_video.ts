@@ -4,7 +4,7 @@ import prism from 'prism-media'
 import { Readable, Transform } from 'node:stream'
 
 import { H264NalSplitter, H265NalSplitter, IvfTransformer, MediaUdp } from '#src/client/index'
-import { VideoStream, AudioStream } from '#src/media/index'
+import { AudioStream, VideoStream } from '#src/media/index'
 
 import { StreamOutput } from '@dank074/fluent-ffmpeg-multistream-ts'
 import { normalizeVideoCodec } from '#src/utils'
