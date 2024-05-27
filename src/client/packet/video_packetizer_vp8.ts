@@ -1,5 +1,5 @@
 import { MAX_INT16BIT, MediaUdp } from '#src/client/index'
-import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
+import { BaseMediaPacketizer } from './base_media_packetizer.js'
 
 /**
  * VP8 payload format
