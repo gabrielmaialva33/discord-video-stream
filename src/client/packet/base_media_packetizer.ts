@@ -31,11 +31,13 @@ export class BaseMediaPacketizer {
     this._sequence = 0
     this._timestamp = 0
     this._totalBytes = 0
+    this._totalPackets = 0
     this._prevTotalPackets = 0
     this._extensionEnabled = extensionEnabled
     this._ssrc = 0
     this._srInterval = 512 // Sane fallback value for interval
     this._lastPacketTime = 0
+    this._mtu = 1200
   }
 
   private _ssrc: number
