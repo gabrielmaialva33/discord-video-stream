@@ -15,25 +15,25 @@ import { normalizeVideoCodec } from '#src/utils'
 // credit to discord.js
 function parseLocalPacket(message: Buffer) {
   const packet = Buffer.from(message)
-
   const ip = packet.subarray(8, packet.indexOf(0, 8)).toString('utf8')
 
   if (!isIPv4(ip)) throw new Error('Malformed IP address')
 
   const port = packet.readUInt16BE(packet.length - 2)
-
   return { ip, port }
 }
 
 export class MediaUdp {
   private _nonce: number
-  private _socket: udpCon.Socket
+  private _socket: udpCon.Socket | null
   private readonly _mediaConnection: BaseMediaConnection
+  private readonly _audioPacketizer: BaseMediaPacketizer
   private readonly _videoPacketizer: BaseMediaPacketizer
+  private _ready: boolean
 
   constructor(voiceConnection: BaseMediaConnection) {
     this._nonce = 0
-
+    this._socket = null
     this._mediaConnection = voiceConnection
     this._audioPacketizer = new AudioPacketizer(this)
 
@@ -51,13 +51,13 @@ export class MediaUdp {
       default:
         throw new Error(`Packetizer not implemented for ${videoCodec}`)
     }
+
+    this._ready = false
   }
 
   get mediaConnection(): BaseMediaConnection {
     return this._mediaConnection
   }
-
-  private _ready: boolean
 
   get ready(): boolean {
     return this._ready
@@ -66,8 +66,6 @@ export class MediaUdp {
   set ready(val: boolean) {
     this._ready = val
   }
-
-  private readonly _audioPacketizer: BaseMediaPacketizer
 
   get audioPacketizer(): BaseMediaPacketizer {
     return this._audioPacketizer
@@ -80,7 +78,6 @@ export class MediaUdp {
   getNewNonceBuffer(): Buffer {
     const nonceBuffer = Buffer.alloc(24)
     this._nonce = (this._nonce + 1) % MAX_INT32BIT
-
     nonceBuffer.writeUInt32BE(this._nonce, 0)
     return nonceBuffer
   }
@@ -92,31 +89,30 @@ export class MediaUdp {
 
   sendVideoFrame(frame: any): void {
     if (!this.ready) return
-
     this.videoPacketizer.sendFrame(frame)
   }
 
   sendPacket(packet: Buffer): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      try {
-        this._socket?.send(
-          packet,
-          0,
-          packet.length,
-          this._mediaConnection.port!,
-          this._mediaConnection.address!,
-          (error, _bytes) => {
-            if (error) {
-              console.log('ERROR', error)
-              reject(error)
-            }
-
+      if (!this._socket) {
+        reject(new Error('Socket is not initialized'))
+        return
+      }
+      this._socket.send(
+        packet,
+        0,
+        packet.length,
+        this._mediaConnection.port!,
+        this._mediaConnection.address!,
+        (error) => {
+          if (error) {
+            console.log('ERROR', error)
+            reject(error)
+          } else {
             resolve()
           }
-        )
-      } catch (e) {
-        reject(e)
-      }
+        }
+      )
     })
   }
 
@@ -128,7 +124,9 @@ export class MediaUdp {
     try {
       this.ready = false
       this._socket?.disconnect()
-    } catch (e) {}
+    } catch (e) {
+      console.error('Error disconnecting socket', e)
+    }
   }
 
   createUdp(): Promise<void> {
@@ -142,21 +140,19 @@ export class MediaUdp {
 
       this._socket.once('message', (message) => {
         if (message.readUInt16BE(0) !== 2) {
-          reject('wrong handshake packet for udp')
+          reject(new Error('Wrong handshake packet for UDP'))
+          return
         }
         try {
           const packet = parseLocalPacket(message)
           this._mediaConnection.setProtocols(packet.ip, packet.port)
+          resolve()
         } catch (e) {
           reject(e)
         }
-
-        resolve()
-        this._socket!.on('message', this.handleIncoming)
       })
 
       const blank = Buffer.alloc(74)
-
       blank.writeUInt16BE(1, 0)
       blank.writeUInt16BE(70, 2)
       blank.writeUInt32BE(this._mediaConnection.ssrc!, 4)
@@ -167,7 +163,7 @@ export class MediaUdp {
         blank.length,
         this._mediaConnection.port!,
         this._mediaConnection.address!,
-        (error, _bytes) => {
+        (error) => {
           if (error) {
             reject(error)
           }
