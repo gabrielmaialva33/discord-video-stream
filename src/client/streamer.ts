@@ -1,7 +1,10 @@
 import { Client } from 'discord.js-selfbot-v13'
 
-import { MediaUdp, StreamConnection, StreamOptions, VoiceConnection } from '#src/client/voice/index'
 import { GatewayOpCodes } from '#src/client/gateway_op_codes'
+import { VoiceConnection } from '#src/client/voice/voice_connection'
+import { StreamConnection } from '#src/client/voice/stream_connection'
+import { MediaUdp } from '#src/client/voice/media_udp'
+import { StreamOptions } from '#src/client/voice/index'
 
 export class Streamer {
   private _voiceConnection?: VoiceConnection

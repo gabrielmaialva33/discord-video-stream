@@ -1,3 +1,3 @@
-export * from '#src/client/index'
-export * from '#src/media/index'
-export * from '#src/utils'
+export * from './client/index.js'
+export * from './media/index.js'
+export * from './utils.js'
