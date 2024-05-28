@@ -13,29 +13,24 @@ type IvfHeader = {
   frameCount: number
 }
 
-/*
- ** Transform stream to transform file stream into ivf file
- ** TODO: optimize concats
- */
 class IvfTransformer extends Transform {
-  headerSize: number
-  frameHeaderSize: number
-  header: IvfHeader | null
-  buf: Buffer | null
-  retFullFrame: boolean
+  private readonly headerSize: number
+  private readonly frameHeaderSize: number
+  private header: IvfHeader | null
+  private buffer: Buffer | null
+  private readonly returnFullFrame: boolean
 
   constructor(options?: any) {
     super(options)
     this.headerSize = 32
     this.frameHeaderSize = 12
-
     this.header = null
-    this.buf = null
-    this.retFullFrame = options && options.fullframe ? options.fullframe : false
+    this.buffer = null
+    this.returnFullFrame = options?.fullframe ?? false
   }
 
-  _parseHeader(header: Buffer) {
-    const out = {
+  private parseHeader(header: Buffer) {
+    this.header = {
       signature: header.subarray(0, 4).toString(),
       version: header.readUIntLE(4, 2),
       headerLength: header.readUIntLE(6, 2),
@@ -46,62 +41,58 @@ class IvfTransformer extends Transform {
       timeNumerator: header.readUIntLE(20, 4),
       frameCount: header.readUIntLE(24, 4),
     }
-
-    this.header = out
     this.emit('header', this.header)
   }
 
-  _getFrameSize(buf: Buffer) {
+  private getFrameSize(buf: Buffer) {
     return buf.readUIntLE(0, 4)
   }
 
-  _parseFrame(frame: Buffer) {
-    const size = this._getFrameSize(frame)
+  private parseFrame(frame: Buffer) {
+    const size = this.getFrameSize(frame)
 
-    if (this.retFullFrame) return this.push(frame.subarray(0, 12 + size))
+    if (this.returnFullFrame) {
+      this.push(frame.subarray(0, 12 + size))
+      return
+    }
 
-    const out = {
+    const frameData = {
       size: size,
       timestamp: frame.readBigUInt64LE(4),
       data: frame.subarray(12, 12 + size),
     }
-    this.push(out.data)
+    this.push(frameData.data)
   }
 
-  _appendChunkToBuf(chunk: any) {
-    if (this.buf) this.buf = Buffer.concat([this.buf, chunk])
-    else this.buf = chunk
+  private appendChunkToBuffer(chunk: Buffer) {
+    this.buffer = this.buffer ? Buffer.concat([this.buffer, chunk]) : chunk
   }
 
-  _updateBufLen(size: number) {
-    if (!this.buf) return null
+  private updateBuffer(size: number) {
+    if (!this.buffer) return
 
-    if (this.buf.length > size) this.buf = this.buf.subarray(size, this.buf.length)
-    else this.buf = null
+    this.buffer = this.buffer.length > size ? this.buffer.subarray(size) : null
   }
 
-  _transform(chunk: any, _encoding: BufferEncoding, callback: TransformCallback): void {
-    this._appendChunkToBuf(chunk)
+  _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+    this.appendChunkToBuffer(chunk)
 
-    // parse header
-    if (!this.header) {
-      if (this.buf && this.buf.length >= this.headerSize) {
-        this._parseHeader(this.buf.subarray(0, this.headerSize))
-        this._updateBufLen(this.headerSize)
-      } else {
-        callback()
-        return
-      }
+    // Parse header
+    if (!this.header && this.buffer && this.buffer.length >= this.headerSize) {
+      this.parseHeader(this.buffer.subarray(0, this.headerSize))
+      this.updateBuffer(this.headerSize)
     }
 
-    // parse frame(s)
-    while (this.buf && this.buf.length >= this.frameHeaderSize) {
-      const size = this._getFrameSize(this.buf) + this.frameHeaderSize
+    // Parse frames
+    while (this.buffer && this.buffer.length >= this.frameHeaderSize) {
+      const frameSize = this.getFrameSize(this.buffer) + this.frameHeaderSize
 
-      if (this.buf.length >= size) {
-        this._parseFrame(this.buf.subarray(0, size))
-        this._updateBufLen(size)
-      } else break
+      if (this.buffer.length >= frameSize) {
+        this.parseFrame(this.buffer.subarray(0, frameSize))
+        this.updateBuffer(frameSize)
+      } else {
+        break
+      }
     }
 
     callback()
@@ -110,61 +101,50 @@ class IvfTransformer extends Transform {
 
 async function readIvfFile(filepath: string) {
   const inputStream = fs.createReadStream(filepath)
+  const transformer = new IvfTransformer({ fullframe: true })
 
-  const stream = new IvfTransformer({ fullframe: true })
-  inputStream.pipe(stream)
+  inputStream.pipe(transformer)
 
-  let out: any = {
-    frames: [],
-  }
+  const result: { frames: Buffer[] } & Partial<IvfHeader> = { frames: [] }
 
-  await new Promise<void>((resolve, _reject) => {
-    stream.on('header', (header) => {
-      out = {
-        ...out,
-        ...header,
-      }
+  await new Promise<void>((resolve) => {
+    transformer.on('header', (header) => {
+      Object.assign(result, header)
     })
 
-    stream.on('data', (frame) => {
-      out.frames.push(frame)
+    transformer.on('data', (frame) => {
+      result.frames.push(frame)
     })
 
-    stream.on('end', () => {
-      out.frames = Buffer.concat(out.frames)
+    transformer.on('end', () => {
       resolve()
     })
   })
 
-  return out
+  return result
 }
 
-// get frame, starts at one
+// Get frame, starts at one
 function getFrameFromIvf(file: any, framenum = 1) {
   if (!(framenum > 0 && framenum <= file.frameCount)) return false
 
   let currentFrame = 1
   let currentBuffer = file.frames
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const size = currentBuffer.readUIntLE(0, 4)
 
-    // jump to next frame if isnt the requested frame
     if (currentFrame !== framenum) {
-      currentBuffer = currentBuffer.slice(12 + size, currentBuffer.length)
+      currentBuffer = currentBuffer.slice(12 + size)
       currentFrame++
       continue
     }
 
-    // return frame data
-    const out = {
+    return {
       size: size,
       timestamp: currentBuffer.readBigUInt64LE(4),
       data: currentBuffer.slice(12, 12 + size),
     }
-
-    return out
   }
 }
 

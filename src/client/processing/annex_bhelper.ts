@@ -92,9 +92,12 @@ export interface AnnexBHelpers {
   isAUD(unitType: number): boolean
 }
 
+const H264_NAL_UNIT_MASK = 0x1f
+const H265_NAL_UNIT_MASK = 0x3f
+
 export const H264Helpers: AnnexBHelpers = {
   getUnitType(frame) {
-    return frame[0] & 0x1f
+    return frame[0] & H264_NAL_UNIT_MASK
   },
   splitHeader(frame) {
     return [frame.subarray(0, 1), frame.subarray(1)]
@@ -106,7 +109,7 @@ export const H264Helpers: AnnexBHelpers = {
 
 export const H265Helpers: AnnexBHelpers = {
   getUnitType(frame) {
-    return (frame[0] >> 1) & 0x3f
+    return (frame[0] >> 1) & H265_NAL_UNIT_MASK
   },
   splitHeader(frame) {
     return [frame.subarray(0, 2), frame.subarray(2)]
