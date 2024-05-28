@@ -76,7 +76,7 @@ const defaultStreamOptions: StreamOptions = {
   videoCodec: 'H264',
   readAtNativeFps: true,
   rtcpSenderReportEnabled: true,
-  h26xPreset: 'ultrafast',
+  h26xPreset: 'medium',
 }
 
 export abstract class BaseMediaConnection {
