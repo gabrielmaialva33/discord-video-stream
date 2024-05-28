@@ -12,7 +12,7 @@ import {
   VideoStream,
 } from '#src/media/index'
 
-import { StreamOutput } from '@dank074/fluent-ffmpeg-multistream-ts'
+import { StreamOutput } from '@gabrielmaialva33/fluent-ffmpeg-multistream-ts'
 import { normalizeVideoCodec } from '#src/utils'
 
 export let command: ffmpeg.FfmpegCommand
