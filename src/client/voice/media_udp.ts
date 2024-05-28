@@ -82,7 +82,7 @@ export class MediaUdp {
     return nonceBuffer
   }
 
-  sendAudioFrame(frame: any): void {
+  sendAudioFrame(frame: Buffer): void {
     if (!this.ready) return
     this.audioPacketizer.sendFrame(frame)
   }
