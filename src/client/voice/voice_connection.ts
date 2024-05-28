@@ -1,5 +1,5 @@
-import { BaseMediaConnection } from '#src/client/index'
-import { StreamConnection } from '#src/client/voice/stream_connection'
+import { BaseMediaConnection } from './base_media_connection.js'
+import { StreamConnection } from './stream_connection.js'
 
 export class VoiceConnection extends BaseMediaConnection {
   streamConnection?: StreamConnection

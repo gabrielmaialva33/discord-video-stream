@@ -1,5 +1,5 @@
-import { BaseMediaConnection } from '#src/client/index'
-import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
+import { BaseMediaConnection } from './base_media_connection.js'
+import { VoiceOpCodes } from './voice_op_codes.js'
 
 export class StreamConnection extends BaseMediaConnection {
   private _streamKey: string
