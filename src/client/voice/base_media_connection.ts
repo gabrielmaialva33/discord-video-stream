@@ -88,7 +88,7 @@ export abstract class BaseMediaConnection {
   ws: WebSocket | null = null
   ready: (udp: MediaUdp) => void
   status: VoiceConnectionStatus
-  server: string | null = null // websocket url
+  server: string | null = null
   token: string | null = null
   session_id: string | null = null
   address: string | null = null
@@ -136,7 +136,9 @@ export abstract class BaseMediaConnection {
   }
 
   stop(): void {
-    this.interval && clearInterval(this.interval)
+    if (this.interval) {
+      clearInterval(this.interval)
+    }
     this.status.started = false
     this.ws?.close()
     this.udp?.stop()
@@ -144,7 +146,6 @@ export abstract class BaseMediaConnection {
 
   setSession(session_id: string): void {
     this.session_id = session_id
-
     this.status.hasSession = true
     this.start()
   }
@@ -152,7 +153,6 @@ export abstract class BaseMediaConnection {
   setTokens(server: string, token: string): void {
     this.token = token
     this.server = server
-
     this.status.hasToken = true
     this.start()
   }
@@ -165,35 +165,68 @@ export abstract class BaseMediaConnection {
     if (this.status.hasSession && this.status.hasToken) {
       if (this.status.started) return
       this.status.started = true
+      this.initializeWebSocket()
+    }
+  }
 
-      this.ws = new WebSocket('wss://' + this.server + '/?v=7', {
-        followRedirects: true,
-      })
-      this.ws.on('open', () => {
-        if (this.status.resuming) {
-          this.status.resuming = false
-          this.resume()
-        } else {
-          this.identify()
+  initializeWebSocket(): void {
+    this.ws = new WebSocket(`wss://${this.server}/?v=7`, { followRedirects: true })
+    this.ws.on('open', this.handleOpen.bind(this))
+    this.ws.on('error', this.handleError.bind(this))
+    this.ws.on('close', this.handleClose.bind(this))
+    this.ws.on('message', this.handleMessage.bind(this))
+  }
+
+  handleOpen(): void {
+    if (this.status.resuming) {
+      this.status.resuming = false
+      this.resume()
+    } else {
+      this.identify()
+    }
+  }
+
+  handleError(err: Error): void {
+    console.error(err)
+  }
+
+  handleClose(code: number): void {
+    const wasStarted = this.status.started
+    this.status.started = false
+    this.udp.ready = false
+    const canResume = code === 4015 || code < 4000
+    if (canResume && wasStarted) {
+      this.status.resuming = true
+      this.start()
+    }
+  }
+
+  handleMessage(data: any): void {
+    const { op, d } = JSON.parse(data)
+    switch (op) {
+      case VoiceOpCodes.READY:
+        this.handleReady(d)
+        this.sendVoice()
+        this.setVideoStatus(false)
+        break
+      case VoiceOpCodes.HELLO:
+        this.setupHeartbeat(d.heartbeat_interval)
+        break
+      case VoiceOpCodes.SELECT_PROTOCOL_ACK:
+        this.handleSession(d)
+        break
+      case VoiceOpCodes.HEARTBEAT_ACK:
+      case VoiceOpCodes.SPEAKING:
+        break
+      case VoiceOpCodes.RESUMED:
+        this.status.started = true
+        this.udp.ready = true
+        break
+      default:
+        if (op >= 4000) {
+          console.error(`Error ${this.constructor.name} connection`, d)
         }
-      })
-      this.ws.on('error', (err) => {
-        console.error(err)
-      })
-      this.ws.on('close', (code) => {
-        const wasStarted = this.status.started
-
-        this.status.started = false
-        this.udp.ready = false
-
-        const canResume = code === 4_015 || code < 4_000
-
-        if (canResume && wasStarted) {
-          this.status.resuming = true
-          this.start()
-        }
-      })
-      this.setupEvents()
+        break
     }
   }
 
@@ -202,47 +235,16 @@ export abstract class BaseMediaConnection {
     this.address = d.ip
     this.port = d.port
     this.modes = d.modes
-    this.videoSsrc = this.ssrc + 1 // todo: set it from packet streams object
+    this.videoSsrc = this.ssrc + 1
     this.rtxSsrc = this.ssrc + 2
-
     this.udp.audioPacketizer.ssrc = this.ssrc
     this.udp.videoPacketizer.ssrc = this.videoSsrc
   }
 
   handleSession(d: SessionMessage): void {
     this.secretkey = new Uint8Array(d.secret_key)
-
     this.ready(this.udp)
     this.udp.ready = true
-  }
-
-  setupEvents(): void {
-    this.ws?.on('message', (data: any) => {
-      const { op, d } = JSON.parse(data)
-
-      if (op === VoiceOpCodes.READY) {
-        // ready
-        this.handleReady(d)
-        this.sendVoice()
-        this.setVideoStatus(false)
-      } else if (op >= 4000) {
-        console.error(`Error ${this.constructor.name} connection`, d)
-      } else if (op === VoiceOpCodes.HELLO) {
-        this.setupHeartbeat(d.heartbeat_interval)
-      } else if (op === VoiceOpCodes.SELECT_PROTOCOL_ACK) {
-        // session description
-        this.handleSession(d)
-      } else if (op === VoiceOpCodes.SPEAKING) {
-        // ignore speaking updates
-      } else if (op === VoiceOpCodes.HEARTBEAT_ACK) {
-        // ignore heartbeat acknowledgements
-      } else if (op === VoiceOpCodes.RESUMED) {
-        this.status.started = true
-        this.udp.ready = true
-      } else {
-        //console.log("unhandled voice event", {op, d});
-      }
-    })
   }
 
   setupHeartbeat(interval: number): void {
@@ -255,17 +257,9 @@ export abstract class BaseMediaConnection {
   }
 
   sendOpcode(code: number, data: any): void {
-    this.ws?.send(
-      JSON.stringify({
-        op: code,
-        d: data,
-      })
-    )
+    this.ws?.send(JSON.stringify({ op: code, d: data }))
   }
 
-  /*
-   ** identifies with media server with credentials
-   */
   identify(): void {
     this.sendOpcode(VoiceOpCodes.IDENTIFY, {
       server_id: this.serverId,
@@ -285,11 +279,6 @@ export abstract class BaseMediaConnection {
     })
   }
 
-  /*
-   ** Sets protocols and ip data used for video and audio.
-   ** Uses vp8 for video
-   ** Uses opus for audio
-   */
   setProtocols(ip: string, port: number): void {
     this.sendOpcode(VoiceOpCodes.SELECT_PROTOCOL, {
       protocol: 'udp',
@@ -361,10 +350,6 @@ export abstract class BaseMediaConnection {
    ** Start media connection
    */
   sendVoice(): Promise<void> {
-    return new Promise<void>((resolve, _reject) => {
-      this.udp.createUdp().then(() => {
-        resolve()
-      })
-    })
+    return this.udp.createUdp().then(() => undefined)
   }
 }
