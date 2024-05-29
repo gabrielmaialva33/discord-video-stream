@@ -69,7 +69,7 @@ If you are on Windows, you can download it from the official ffmpeg website: htt
 Install the package, alongside its peer-dependency discord.js-selfbot-v13:
 
 ```
-npm install @dank074/discord-video-stream@latest
+npm install @gabrielmaialva33/discord-video-stream@latest
 npm install discord.js-selfbot-v13@latest
 ```
 
@@ -77,7 +77,7 @@ Create a new client, and patch its events to listen for voice gateway events:
 
 ```typescript
 import { Client } from 'discord.js-selfbot-v13'
-import { Streamer } from '@dank074/discord-video-stream'
+import { Streamer } from '@gabrielmaialva33/discord-video-stream'
 
 const streamer = new Streamer(new Client())
 await streamer.client.login('TOKEN HERE')
