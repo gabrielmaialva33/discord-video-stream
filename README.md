@@ -1,6 +1,40 @@
-# Discord Video Stream
+<h1 align="center">
+  <br>
+  <img src=".github/assets/live-streaming.png" alt="Live" width="200">
+  <br>
+   A VideoStream lib for <a href="https://discord.com/">Discord</a>
+  <br>
+</h1>
 
-Fork: [Discord-video-experiment](https://github.com/mrjvs/Discord-video-experiment)
+<p align="center">
+  <strong>An open-source Discord lib to stream videos on voice channels.</strong>
+</p>
+
+<p align="center">
+  <img src="https://wakatime.com/badge/user/e61842d0-c588-4586-96a3-f0448a434be4/project/018e873e-020a-463f-b474-43dded13bc1d.svg" alt="waka" />
+  <img src="https://img.shields.io/github/license/gabrielmaialva33/discord-video-stream?color=00b8d3?style=flat&logo=appveyor" alt="License" />
+  <img src="https://img.shields.io/github/languages/top/gabrielmaialva33/discord-video-stream?style=flat&logo=appveyor" alt="GitHub top language" >
+  <img src="https://img.shields.io/github/languages/count/gabrielmaialva33/discord-video-stream?style=flat&logo=appveyor" alt="GitHub language count" >
+  <img src="https://img.shields.io/github/repo-size/gabrielmaialva33/discord-video-stream?style=flat&logo=appveyor" alt="Repository size" >
+  <a href="https://github.com/gabrielmaialva33/discord-video-stream/commits/master">
+    <img src="https://img.shields.io/github/last-commit/gabrielmaialva33/discord-video-stream?style=flat&logo=appveyor" alt="GitHub last commit" >
+    <img src="https://img.shields.io/badge/made%20by-Maia-15c3d6?style=flat&logo=appveyor" alt="Maia" >  
+  </a>
+</p>
+
+<br>
+
+<p align="center">
+  <a href="#bookmark-about">About</a>&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#computer-technologies">Technologies</a>&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#wrench-tools">Tools</a>&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#package-installation">Installation</a>&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;
+  <a href="#memo-license">License</a>
+</p>
+
+<br>
+
+## :bookmark: About
 
 This project implements the custom Discord UDP protocol for sending media. Since Discord is likely change their custom
 protocol, this library is subject to break at any point. An effort will be made to keep this library up to date with the
@@ -9,12 +43,14 @@ latest Discord protocol, but it is not guranteed.
 For better stability it is recommended to use WebRTC protocol instead since Discord is forced to adhere to spec, which
 means that the non-signaling code is guaranteed to work.
 
-## Features
+<br>
+
+## :rocket: **Features**
 
 - Playing vp8 or h264 video in a voice channel (`go live`, or webcam video)
 - Playing opus audio in a voice channel
 
-## Implementation
+## :construction: **Implementation**
 
 What I implemented and what I did not.
 
@@ -38,46 +74,36 @@ What I implemented and what I did not.
 #### Extras
 
 - [x] Figure out rtp header extensions (discord specific) (discord seems to use one-byte RTP header
-      extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
+  extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
 
 Extensions supported by Discord (taken from the webrtc sdp exchange)
 
-```
-"a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level"
-"a=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
-"a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
-"a=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid"
-"a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay"
-"a=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/video-content-type"
-"a=extmap:7 http://www.webrtc.org/experiments/rtp-hdrext/video-timing"
-"a=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/color-space"
-"a=extmap:10 urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id"
-"a=extmap:11 urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id"
-"a=extmap:13 urn:3gpp:video-orientation"
-"a=extmap:14 urn:ietf:params:rtp-hdrext:toffset"
-```
+## :computer: Requirements
 
-## Requirements
+- **[FFmpeg](https://ffmpeg.org/download.html)** is required for the usage of this package. If you are on linux you can
+  easily install ffmpeg from your
+  distribution's package manager.
 
-Ffmpeg is required for the usage of this package. If you are on linux you can easily install ffmpeg from your
-distribution's package manager.
+  ```sh
+    $ sudo apt-get install ffmpeg
+  ```
 
-If you are on Windows, you can download it from the official ffmpeg website: https://ffmpeg.org/download.html
+- **[discord.js-selfbot-v13](https://www.npmjs.com/package/discord.js-selfbot-v13)** is required for the usage of this
+  package. If you are on linux you can easily install discord.js-selfbot-v13 from your
 
-## Usage
+  ```sh
+    $ pnpm add discord.js-selfbot-v13
+  ```
 
-Install the package, alongside its peer-dependency discord.js-selfbot-v13:
+<br>
 
-```
-npm install @gabrielmaialva33/discord-video-stream@latest
-npm install discord.js-selfbot-v13@latest
-```
+## :package: Usage
 
 Create a new client, and patch its events to listen for voice gateway events:
 
 ```typescript
-import { Client } from 'discord.js-selfbot-v13'
-import { Streamer } from '@gabrielmaialva33/discord-video-stream'
+import {Client} from 'discord.js-selfbot-v13'
+import {Streamer} from '@gabrielmaialva33/discord-video-stream'
 
 const streamer = new Streamer(new Client())
 await streamer.client.login('TOKEN HERE')
@@ -87,7 +113,6 @@ Make client join a voice channel and create a stream:
 
 ```typescript
 await streamer.joinVoice('GUILD ID HERE', 'CHANNEL ID HERE')
-
 const udp = await streamer.createStream()
 ```
 
@@ -108,40 +133,9 @@ try {
 }
 ```
 
-## Running example
+<br>
 
-`examples/basic/src/config.json`:
-
-```json
-"token": "SELF TOKEN HERE",
-"acceptedAuthors": ["USER_ID_HERE"],
-```
-
-1. Configure your `config.json` with your accepted authors ids, and your self token
-2. Generate js files with `npm run build`
-3. Start program with: `npm run start`
-4. Join a voice channel
-5. Start streaming with commands:
-
-for go-live
-
-```
-$play-live <Direct video link>
-```
-
-or for cam
-
-```
-$play-cam <Direct video link>
-```
-
-for example:
-
-```
-$play-live http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
-```
-
-## FAQS
+### :arrow_down: **FAQS
 
 - Can I stream on existing voice connection (CAM) and in a go-live connection simultaneously?
 
@@ -153,3 +147,29 @@ media packets.
 
 No, Discord blocks video from bots which is why this library uses a selfbot library as peer dependency. You must use a
 user token
+
+<br>
+
+## :memo: License
+
+This project is under the **MIT** license. [MIT](./LICENSE) ❤️
+
+<br>
+
+## :rocket: **Contributors**
+
+| [![Maia](https://avatars.githubusercontent.com/u/26732067?size=100)](https://github.com/gabrielmaialva33) |
+|-----------------------------------------------------------------------------------------------------------|
+| [Maia](https://github.com/gabrielmaialva33)                                                               |
+
+Made with ❤️ by Maia 👋🏽 [Get in touch!](https://t.me/mrootx)
+
+## :star:
+
+Liked? Leave a little star to help the project ⭐
+
+<br/>
+<br/>
+
+<p align="center"><img src="https://raw.githubusercontent.com/gabrielmaialva33/gabrielmaialva33/master/assets/gray0_ctp_on_line.svg?sanitize=true" /></p>
+<p align="center">&copy; 2017-present <a href="https://github.com/gabrielmaialva33/" target="_blank">Maia</a>
