@@ -50,6 +50,8 @@ means that the non-signaling code is guaranteed to work.
 - Playing vp8 or h264 video in a voice channel (`go live`, or webcam video)
 - Playing opus audio in a voice channel
 
+<br>
+
 ## :construction: **Implementation**
 
 What I implemented and what I did not.
@@ -77,6 +79,8 @@ What I implemented and what I did not.
   extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
 
 Extensions supported by Discord (taken from the webrtc sdp exchange)
+
+<br>
 
 ## :computer: Requirements
 
