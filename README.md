@@ -77,7 +77,7 @@ What I implemented and what I did not.
 #### Extras
 
 - [x] Figure out rtp header extensions (discord specific) (discord seems to use one-byte RTP header
-  extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
+      extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
 
 Extensions supported by Discord (taken from the webrtc sdp exchange)
 
@@ -107,8 +107,8 @@ Extensions supported by Discord (taken from the webrtc sdp exchange)
 Create a new client, and patch its events to listen for voice gateway events:
 
 ```typescript
-import {Client} from 'discord.js-selfbot-v13'
-import {Streamer} from '@gabrielmaialva33/discord-video-stream'
+import { Client } from 'discord.js-selfbot-v13'
+import { Streamer } from '@gabrielmaialva33/discord-video-stream'
 
 const streamer = new Streamer(new Client())
 await streamer.client.login('TOKEN HERE')
@@ -140,7 +140,7 @@ try {
 
 <br>
 
-### :arrow_down: **FAQS
+### :arrow_down: \*\*FAQS
 
 - Can I stream on existing voice connection (CAM) and in a go-live connection simultaneously?
 
@@ -164,7 +164,7 @@ This project is under the **MIT** license. [MIT](./LICENSE) ❤️
 ## :rocket: **Contributors**
 
 | [![Maia](https://avatars.githubusercontent.com/u/26732067?size=100)](https://github.com/gabrielmaialva33) |
-|-----------------------------------------------------------------------------------------------------------|
+| --------------------------------------------------------------------------------------------------------- |
 | [Maia](https://github.com/gabrielmaialva33)                                                               |
 
 Made with ❤️ by Maia 👋🏽 [Get in touch!](https://t.me/mrootx)
