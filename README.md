@@ -2,7 +2,7 @@
   <br>
   <img src=".github/assets/live-streaming.png" alt="Live" width="200">
   <br>
-   A VideoStream lib for <a href="https://discord.com/">Discord</a>
+   VideoStream lib for <a href="https://discord.com/">Discord</a>
   <br>
 </h1>
 
