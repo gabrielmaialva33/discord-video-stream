@@ -1,6 +1,6 @@
 <h1 align="center">
   <br>
-  <img src=".github/assets/live-streaming.png" alt="Live" width="200">
+  <img src=".github/assets/video-stream.png" alt="Live" width="200">
   <br>
    VideoStream lib for <a href="https://discord.com/">Discord</a>
   <br>
