@@ -1,37 +1,30 @@
-import { Writable, WritableOptions } from 'node:stream'
-import { MediaUdp } from '#src/client/index'
+import { BaseMediaStream } from './base_media_stream.js'
+import { MediaUdp } from '../client/index.js'
+import { Packet } from '@libav.js/variant-webcodecs'
+import { combineLoHi } from './utils.js'
 
-export class VideoStream extends Writable {
-  private readonly udp: MediaUdp
-  private count: number
-  private sleepTime: number
-  private startTime?: number
-  private readonly noSleep: boolean
+export class VideoStream extends BaseMediaStream {
+  udp: MediaUdp
 
-  constructor(udp: MediaUdp, fps: number = 30, noSleep = false, options?: WritableOptions) {
-    super(options)
+  constructor(udp: MediaUdp) {
+    super({ objectMode: true })
     this.udp = udp
-    this.count = 0
-    this.sleepTime = 1000 / fps
-    this.noSleep = noSleep
   }
 
-  setSleepTime(time: number): void {
-    this.sleepTime = time
-  }
+  async _write(frame: Packet, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    await this._waitForOtherStream()
 
-  _write(frame: any, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
-    this.count++
-    if (!this.startTime) this.startTime = performance.now()
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    const { data, ptshi, pts, time_base_num, time_base_den } = frame
+    await this.udp.sendVideoFrame(Buffer.from(data))
+    if (
+      ptshi !== undefined &&
+      pts !== undefined &&
+      time_base_num !== undefined &&
+      time_base_den !== undefined
+    )
+      this.pts = (combineLoHi(ptshi, pts) / time_base_den) * time_base_num
 
-    this.udp.sendVideoFrame(frame)
-
-    const next = (this.count + 1) * this.sleepTime - (performance.now() - this.startTime)
-
-    if (this.noSleep || next <= 0) {
-      callback()
-    } else {
-      setTimeout(callback, next)
-    }
+    callback()
   }
 }

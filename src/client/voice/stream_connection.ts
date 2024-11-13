@@ -1,10 +1,10 @@
-import { BaseMediaConnection } from './base_media_connection.js'
-import { VoiceOpCodes } from './voice_op_codes.js'
+import { BaseMediaConnection } from '#src/client/voice/base_media_connection'
+import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
 
 export class StreamConnection extends BaseMediaConnection {
-  private _streamKey: string
+  private _streamKey: string | null = null
 
-  get streamKey(): string {
+  get streamKey(): string | null {
     return this._streamKey
   }
 
@@ -12,9 +12,9 @@ export class StreamConnection extends BaseMediaConnection {
     this._streamKey = value
   }
 
-  private _serverId: string
+  private _serverId: string | null = null
 
-  override get serverId(): string {
+  override get serverId(): string | null {
     return this._serverId
   }
 

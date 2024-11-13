@@ -1,13 +1,9 @@
 import { Client } from 'discord.js-selfbot-v13'
 
-import { GatewayOpCodes } from '#src/client/gateway_op_codes'
-import { VoiceConnection } from '#src/client/voice/voice_connection'
-import { StreamConnection } from '#src/client/voice/stream_connection'
-import { MediaUdp } from '#src/client/voice/media_udp'
-import { StreamOptions } from '#src/client/voice/index'
+import { MediaUdp, StreamConnection, StreamOptions, VoiceConnection } from './voice/index.js'
+import { GatewayOpCodes } from './gateway_op_codes.js'
 
 export class Streamer {
-  private _voiceConnection?: VoiceConnection
   private readonly _client: Client
 
   constructor(client: Client) {
@@ -19,12 +15,14 @@ export class Streamer {
     })
   }
 
-  get client(): Client {
-    return this._client
-  }
+  private _voiceConnection?: VoiceConnection
 
   get voiceConnection(): VoiceConnection | undefined {
     return this._voiceConnection
+  }
+
+  get client(): Client {
+    return this._client
   }
 
   sendOpcode(code: number, data: any): void {
@@ -161,7 +159,8 @@ export class Streamer {
       }
       case 'STREAM_CREATE': {
         const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log({ type, guildId, channelId, userId })
+
+        console.log('STREAM_CREATE.stream_key', type, guildId, channelId, userId)
 
         if (this.voiceConnection?.guildId !== guildId) return
 
@@ -175,8 +174,7 @@ export class Streamer {
       }
       case 'STREAM_SERVER_UPDATE': {
         const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log({ type, guildId, channelId, userId })
-
+        console.log('STREAM_SERVER_UPDATE.stream_key', type, guildId, channelId, userId)
         if (this.voiceConnection?.guildId !== guildId) return
 
         if (userId === this.client.user!.id) {

@@ -1,5 +1,7 @@
-import { MAX_INT16BIT, MediaUdp } from '#src/client/index'
-import { BaseMediaPacketizer } from './base_media_packetizer.js'
+import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
+import { MediaUdp } from '#src/client/voice/media_udp'
+import { extensions } from '#src/index'
+import { MAX_INT16BIT } from '#src/utils'
 
 /**
  * VP8 payload format
@@ -10,45 +12,52 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
   constructor(connection: MediaUdp) {
     super(connection, 0x65, true)
     this._pictureId = 0
-    this.srInterval = 5 * (connection.mediaConnection.streamOptions.fps || 30) * 3 // ~5 seconds, assuming ~3 packets per frame
+    this.srInterval = 5 * connection.mediaConnection.streamOptions.fps * 3 // ~5 seconds, assuming ~3 packets per frame
   }
 
-  override sendFrame(frame: Buffer): void {
+  override async sendFrame(frame: Buffer): Promise<void> {
     super.sendFrame(frame)
-    const dataChunks = this.partitionDataMTUSizedChunks(frame)
+    const data = this.partitionDataMTUSizedChunks(frame)
 
     let bytesSent = 0
-    dataChunks.forEach((chunk, index) => {
-      const isLastPacket = index === dataChunks.length - 1
-      const isFirstPacket = index === 0
-      const packet = this.createPacket(chunk, isLastPacket, isFirstPacket)
-
+    const encryptedPackets = data.map((chunk, i) =>
+      this.createPacket(chunk, i === data.length - 1, i === 0)
+    )
+    for (const packet of await Promise.all(encryptedPackets)) {
       this.mediaUdp.sendPacket(packet)
       bytesSent += packet.length
-    })
-
-    this.onFrameSent(dataChunks.length, bytesSent)
-  }
-
-  createPacket(chunk: Buffer, isLastPacket = true, isFirstPacket = true): Buffer {
-    if (chunk.length > this.mtu) {
-      throw new Error('error packetizing video frame: frame is larger than mtu')
     }
 
-    const packetHeader = this.makeRtpHeader(isLastPacket)
-    const packetData = this.makeChunk(chunk, isFirstPacket)
+    await this.onFrameSent(data.length, bytesSent)
+  }
 
+  async createPacket(chunk: any, isLastPacket = true, isFirstPacket = true): Promise<Buffer> {
+    if (chunk.length > this.mtu)
+      throw Error('error packetizing video frame: frame is larger than mtu')
+
+    const packetHeader = Buffer.concat([
+      this.makeRtpHeader(isLastPacket),
+      this.createExtensionHeader(extensions),
+    ])
+
+    const packetData = Buffer.concat([
+      this.createExtensionPayload(extensions),
+      this.makeChunk(chunk, isFirstPacket),
+    ])
+
+    // nonce buffer used for encryption. 4 bytes are appended to end of packet
     const nonceBuffer = this.mediaUdp.getNewNonceBuffer()
     return Buffer.concat([
       packetHeader,
-      this.encryptData(packetData, nonceBuffer),
+      await this.encryptData(packetData, nonceBuffer, packetHeader),
       nonceBuffer.subarray(0, 4),
     ])
   }
 
-  override onFrameSent(packetsSent: number, bytesSent: number): void {
-    super.onFrameSent(packetsSent, bytesSent)
-    this.incrementTimestamp(90000 / (this.mediaUdp.mediaConnection.streamOptions.fps || 30))
+  override async onFrameSent(packetsSent: number, bytesSent: number): Promise<void> {
+    await super.onFrameSent(packetsSent, bytesSent)
+    // video RTP packet timestamp incremental value = 90,000Hz / fps
+    this.incrementTimestamp(90000 / this.mediaUdp.mediaConnection.streamOptions.fps)
     this.incrementPictureId()
   }
 
@@ -56,21 +65,22 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
     this._pictureId = (this._pictureId + 1) % MAX_INT16BIT
   }
 
-  private makeChunk(frameData: Buffer, isFirstPacket: boolean): Buffer {
-    const headerExtensionBuf = this.createHeaderExtension()
-
+  private makeChunk(frameData: any, isFirstPacket: boolean): Buffer {
+    // vp8 payload descriptor
     const payloadDescriptorBuf = Buffer.alloc(2)
+
     payloadDescriptorBuf[0] = 0x80
     payloadDescriptorBuf[1] = 0x80
-
     if (isFirstPacket) {
       payloadDescriptorBuf[0] |= 0b00010000 // mark S bit, indicates start of frame
     }
 
+    // vp8 pictureid payload extension
     const pictureIdBuf = Buffer.alloc(2)
+
     pictureIdBuf.writeUIntBE(this._pictureId, 0, 2)
     pictureIdBuf[0] |= 0b10000000
 
-    return Buffer.concat([headerExtensionBuf, payloadDescriptorBuf, pictureIdBuf, frameData])
+    return Buffer.concat([payloadDescriptorBuf, pictureIdBuf, frameData])
   }
 }

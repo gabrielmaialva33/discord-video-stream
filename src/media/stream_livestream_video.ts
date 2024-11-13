@@ -1,141 +1,119 @@
+import { PassThrough, Readable } from 'node:stream'
+
 import ffmpeg from 'fluent-ffmpeg'
 import PCancelable from 'p-cancelable'
-import prism from 'prism-media'
-import { Readable, Transform } from 'node:stream'
 
-import { MediaUdp } from '#src/client/index'
-import {
-  AudioStream,
-  IvfTransformer,
-  H265NalSplitter,
-  H264NalSplitter,
-  VideoStream,
-} from '#src/media/index'
+import { MediaUdp } from '../client/index.js'
+import { VideoStream } from './video_stream.js'
+import { AudioStream } from './audio_stream.js'
 
-import { StreamOutput } from '@gabrielmaialva33/fluent-ffmpeg-multistream-ts'
-import { normalizeVideoCodec } from '#src/utils'
-
-export let command: ffmpeg.FfmpegCommand
-
-type CustomHeaders = { [key: string]: string }
+import { normalizeVideoCodec } from '../utils.js'
+import { demux } from './libav_demuxer.js'
 
 export function streamLivestreamVideo(
   input: string | Readable,
   mediaUdp: MediaUdp,
   includeAudio = true,
-  customHeaders?: CustomHeaders
-): PCancelable<string> {
-  return new PCancelable<string>((resolve, reject, onCancel) => {
+  customHeaders?: Record<string, string>
+) {
+  return new PCancelable<string>(async (resolve, reject, onCancel) => {
     const streamOpts = mediaUdp.mediaConnection.streamOptions
-    const videoStream = new VideoStream(mediaUdp, streamOpts.fps, streamOpts.readAtNativeFps)
     const videoCodec = normalizeVideoCodec(streamOpts.videoCodec)
-    let videoOutput: Transform
 
-    switch (videoCodec) {
-      case 'H264':
-        videoOutput = new H264NalSplitter()
-        break
-      case 'H265':
-        videoOutput = new H265NalSplitter()
-        break
-      case 'VP8':
-        videoOutput = new IvfTransformer()
-        break
-      default:
-        throw new Error('Codec not supported')
-    }
-
-    const defaultHeaders: CustomHeaders = {
+    // ffmpeg setup
+    let headers: Record<string, string> = {
       'User-Agent':
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.3',
       'Connection': 'keep-alive',
     }
 
-    const headers = { ...defaultHeaders, ...(customHeaders ?? {}) }
+    headers = { ...headers, ...(customHeaders ?? {}) }
 
-    const isHttpUrl =
-      typeof input === 'string' && (input.startsWith('http') || input.startsWith('https'))
-    const isHls = typeof input === 'string' && input.includes('m3u')
+    let isHttpUrl = false
+    let isHls = false
 
+    if (typeof input === 'string') {
+      isHttpUrl = input.startsWith('http') || input.startsWith('https')
+      isHls = input.includes('m3u')
+    }
+
+    const ffmpegOutput = new PassThrough()
     try {
-      command = ffmpeg(input)
+      // command creation
+      const command = ffmpeg(input)
+        .output(ffmpegOutput)
         .addOption('-loglevel', '0')
-        .addOption('-fflags', 'nobuffer')
-        .addOption('-analyzeduration', '0')
-        .on('end', () => resolve('video ended'))
-        .on('error', (err) => reject('cannot play video ' + err.message))
+        .on('end', () => {
+          resolve('video ended')
+        })
+        .on('error', (err, stdout, stderr) => {
+          console.log('ffmpeg error', stdout, stderr)
+          reject('cannot play video ' + err.message)
+        })
         .on('stderr', console.error)
 
-      const streamOutputUrl = StreamOutput(videoOutput).url
-      const commonOutputOptions = [
-        '-tune zerolatency',
-        '-pix_fmt yuv420p',
-        `-preset ${streamOpts.h26xPreset}`,
-        `-g ${streamOpts.fps}`,
-        `-bf 0`,
-      ]
+      // general output options
+      command
+        .size(`${streamOpts.width}x${streamOpts.height}`)
+        .fpsOutput(streamOpts.fps)
+        .videoBitrate(`${streamOpts.bitrateKbps}k`)
+        .outputFormat('matroska')
 
-      if (videoCodec === 'VP8') {
-        command
-          .output(streamOutputUrl, { end: false })
-          .noAudio()
-          .size(`${streamOpts.width}x${streamOpts.height}`)
-          .fpsOutput(streamOpts.fps)
-          .videoBitrate(`${streamOpts.bitrateKbps}k`)
-          .format('ivf')
-          .outputOption('-deadline', 'realtime')
-      } else if (videoCodec === 'H265') {
-        command
-          .output(streamOutputUrl, { end: false })
-          .noAudio()
-          .size(`${streamOpts.width}x${streamOpts.height}`)
-          .fpsOutput(streamOpts.fps)
-          .videoBitrate(`${streamOpts.bitrateKbps}k`)
-          .format('hevc')
-          .outputOptions([
-            ...commonOutputOptions,
-            '-profile:v main',
-            '-bsf:v hevc_metadata=aud=insert',
-          ])
-      } else {
-        command
-          .output(streamOutputUrl, { end: false })
-          .noAudio()
-          .size(`${streamOpts.width}x${streamOpts.height}`)
-          .fpsOutput(streamOpts.fps)
-          .videoBitrate(`${streamOpts.bitrateKbps}k`)
-          .format('h264')
-          .outputOptions([
-            ...commonOutputOptions,
-            '-profile:v baseline',
-            '-bsf:v h264_metadata=aud=insert',
-          ])
+      // video setup
+      command.outputOption('-bf', '0')
+      switch (videoCodec) {
+        case 'AV1':
+          command.videoCodec('libsvtav1')
+          break
+        case 'VP8':
+          command.videoCodec('libvpx').outputOption('-deadline', 'realtime')
+          break
+        case 'VP9':
+          command.videoCodec('libvpx-vp9').outputOption('-deadline', 'realtime')
+          break
+        case 'H264':
+          command
+            .videoCodec('libx264')
+            .outputOptions([
+              '-tune zerolatency',
+              '-pix_fmt yuv420p',
+              `-preset ${streamOpts.h26xPreset}`,
+              '-profile:v baseline',
+              `-g ${streamOpts.fps}`,
+              `-x264-params keyint=${streamOpts.fps}:min-keyint=${streamOpts.fps}`,
+            ])
+          break
+        case 'H265':
+          command
+            .videoCodec('libx265')
+            .outputOptions([
+              '-tune zerolatency',
+              '-pix_fmt yuv420p',
+              `-preset ${streamOpts.h26xPreset}`,
+              '-profile:v main',
+              `-g ${streamOpts.fps}`,
+              `-x265-params keyint=${streamOpts.fps}:min-keyint=${streamOpts.fps}`,
+            ])
+          break
       }
 
-      videoOutput.pipe(videoStream, { end: false })
-
-      if (includeAudio) {
-        const audioStream = new AudioStream(mediaUdp)
-        const opus = new prism.opus.Encoder({ channels: 2, rate: 48000, frameSize: 960 })
-
-        command
-          .output(StreamOutput(opus).url, { end: false })
-          .noVideo()
-          .audioChannels(2)
-          .audioFrequency(48000)
-          .format('s16le')
-
-        opus.pipe(audioStream, { end: false })
-      }
+      // audio setup
+      command.audioChannels(2).audioFrequency(48000).audioCodec('libopus')
+      //.audioBitrate('128k')
 
       if (streamOpts.hardwareAcceleratedDecoding) command.inputOption('-hwaccel', 'auto')
-      if (streamOpts.readAtNativeFps) command.inputOption('-re')
+
+      command.inputOption('-re')
+
+      if (streamOpts.minimizeLatency) {
+        command.addOptions(['-fflags nobuffer', '-analyzeduration 0'])
+      }
 
       if (isHttpUrl) {
         command.inputOption(
           '-headers',
           Object.keys(headers)
-            .map((key) => `${key}: ${headers[key]}`)
+            .map((key) => key + ': ' + headers[key])
             .join('\r\n')
         )
         if (!isHls) {
@@ -150,7 +128,23 @@ export function streamLivestreamVideo(
 
       command.run()
       onCancel(() => command.kill('SIGINT'))
+
+      // demuxing
+      const { video, audio } = await demux(ffmpegOutput).catch((e) => {
+        command.kill('SIGINT')
+        throw e
+      })
+      const videoStream = new VideoStream(mediaUdp)
+      video!.stream.pipe(videoStream)
+      if (audio && includeAudio) {
+        const audioStream = new AudioStream(mediaUdp)
+        audio.stream.pipe(audioStream)
+        videoStream.syncStream = audioStream
+        audioStream.syncStream = videoStream
+      }
     } catch (e) {
+      //audioStream.end();
+      //videoStream.end();
       reject('cannot play video ' + (e as Error).message)
     }
   })
@@ -158,24 +152,21 @@ export function streamLivestreamVideo(
 
 export function getInputMetadata(input: string | Readable): Promise<ffmpeg.FfprobeData> {
   return new Promise((resolve, reject) => {
-    const instance = ffmpeg(input).on('error', reject)
+    const instance = ffmpeg(input).on('error', (err, _stdout, _stderr) => reject(err))
 
     instance.ffprobe((err, metadata) => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve(metadata)
-      }
+      if (err) reject(err)
       instance.removeAllListeners()
+      resolve(metadata)
       instance.kill('SIGINT')
     })
   })
 }
 
-export function inputHasAudio(metadata: ffmpeg.FfprobeData): boolean {
+export function inputHasAudio(metadata: ffmpeg.FfprobeData) {
   return metadata.streams.some((value) => value.codec_type === 'audio')
 }
 
-export function inputHasVideo(metadata: ffmpeg.FfprobeData): boolean {
+export function inputHasVideo(metadata: ffmpeg.FfprobeData) {
   return metadata.streams.some((value) => value.codec_type === 'video')
 }

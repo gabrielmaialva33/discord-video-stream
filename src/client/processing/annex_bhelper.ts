@@ -92,12 +92,9 @@ export interface AnnexBHelpers {
   isAUD(unitType: number): boolean
 }
 
-const H264_NAL_UNIT_MASK = 0x1f
-const H265_NAL_UNIT_MASK = 0x3f
-
 export const H264Helpers: AnnexBHelpers = {
   getUnitType(frame) {
-    return frame[0] & H264_NAL_UNIT_MASK
+    return frame[0] & 0x1f
   },
   splitHeader(frame) {
     return [frame.subarray(0, 1), frame.subarray(1)]
@@ -109,7 +106,7 @@ export const H264Helpers: AnnexBHelpers = {
 
 export const H265Helpers: AnnexBHelpers = {
   getUnitType(frame) {
-    return (frame[0] >> 1) & H265_NAL_UNIT_MASK
+    return (frame[0] >> 1) & 0x3f
   },
   splitHeader(frame) {
     return [frame.subarray(0, 2), frame.subarray(2)]
@@ -117,4 +114,29 @@ export const H265Helpers: AnnexBHelpers = {
   isAUD(unitType) {
     return unitType === H265NalUnitTypes.AUD_NUT
   },
+}
+
+// Get individual NAL units from an AVPacket frame
+export function splitNalu(frame: Buffer) {
+  const nalus = []
+  let offset = 0
+  while (offset < frame.length) {
+    const naluSize = frame.readUInt32BE(offset)
+    offset += 4
+    const nalu = frame.subarray(offset, offset + naluSize)
+    nalus.push(nalu)
+    offset += nalu.length
+  }
+  return nalus
+}
+
+// Merge NAL units into an AVPacket frame
+export function mergeNalu(nalus: Buffer[]) {
+  const chunks = []
+  for (const nalu of nalus) {
+    const size = Buffer.allocUnsafe(4)
+    size.writeUInt32BE(nalu.length)
+    chunks.push(size, nalu)
+  }
+  return Buffer.concat(chunks)
 }

@@ -1,8 +1,17 @@
-import WebSocket from 'ws'
+import { webcrypto } from 'node:crypto'
 
-import { MediaUdp, VoiceOpCodes } from '#src/index'
-import { ReadyMessage, SessionMessage } from '#src/client/voice/voice_message_types'
-import { normalizeVideoCodec } from '#src/utils'
+import sp from 'sodium-plus'
+import ws from 'ws'
+
+import {
+  normalizeVideoCodec,
+  STREAMS_SIMULCAST,
+  SupportedEncryptionModes,
+  SupportedVideoCodec,
+} from '#src/utils'
+import { MediaUdp } from '#src/client/voice/media_udp'
+import { ReadyMessage, SelectProtocolAck } from '#src/client/voice/voice_message_types'
+import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
 
 type VoiceConnectionStatus = {
   hasSession: boolean
@@ -10,8 +19,6 @@ type VoiceConnectionStatus = {
   started: boolean
   resuming: boolean
 }
-
-export type SupportedVideoCodec = 'H264' | 'H265' | 'VP8' | 'VP9' | 'AV1'
 
 export interface StreamOptions {
   /**
@@ -41,12 +48,6 @@ export interface StreamOptions {
    */
   videoCodec: SupportedVideoCodec
   /**
-   * Ffmpeg will read frames at native framerate. Disabling this make ffmpeg read frames as
-   * fast as possible and `setTimeout` will be used to control output fps instead. Enabling this
-   * can result in certain streams having video/audio out of sync (see https://github.com/gabrielmaialva33/Discord-video-stream/issues/52)
-   */
-  readAtNativeFps: boolean
-  /**
    * Enables sending RTCP sender reports. Helps the receiver synchronize the audio/video frames, except in some weird
    * cases which is why you can disable it
    */
@@ -64,31 +65,41 @@ export interface StreamOptions {
     | 'slow'
     | 'slower'
     | 'veryslow'
+  /**
+   * Adds ffmpeg params to minimize latency and start outputting video as fast as possible.
+   * Might create lag in video output in some rare cases
+   */
+  minimizeLatency: boolean
+
+  /**
+   * ChaCha20-Poly1305 Encryption is faster than AES-256-GCM, except when using AES-NI
+   */
+  forceChacha20Encryption: boolean
 }
 
 const defaultStreamOptions: StreamOptions = {
-  width: 1280,
+  width: 1080,
   height: 720,
   fps: 30,
-  bitrateKbps: 2000,
-  maxBitrateKbps: 4000,
+  bitrateKbps: 1000,
+  maxBitrateKbps: 2500,
   hardwareAcceleratedDecoding: false,
   videoCodec: 'H264',
-  readAtNativeFps: true,
   rtcpSenderReportEnabled: true,
-  h26xPreset: 'medium',
+  h26xPreset: 'ultrafast',
+  minimizeLatency: true,
+  forceChacha20Encryption: false,
 }
 
 export abstract class BaseMediaConnection {
-  private interval: NodeJS.Timeout | null = null
   udp: MediaUdp
   guildId: string
   channelId: string
   botId: string
-  ws: WebSocket | null = null
+  ws: ws | null = null
   ready: (udp: MediaUdp) => void
   status: VoiceConnectionStatus
-  server: string | null = null
+  server: string | null = null //websocket url
   token: string | null = null
   session_id: string | null = null
   address: string | null = null
@@ -96,9 +107,10 @@ export abstract class BaseMediaConnection {
   ssrc: number | null = null
   videoSsrc: number | null = null
   rtxSsrc: number | null = null
-  modes: string[] | null = null
-  secretkey: Uint8Array | null = null
-  private _streamOptions: StreamOptions
+  secretkey: Buffer | null = null
+  secretkeyAes256: Promise<webcrypto.CryptoKey> | null = null
+  secretkeyChacha20: sp.CryptographyKey | null = null
+  private interval: NodeJS.Timeout | null = null
 
   constructor(
     guildId: string,
@@ -125,7 +137,7 @@ export abstract class BaseMediaConnection {
     this.ready = callback
   }
 
-  abstract get serverId(): string | null
+  private _streamOptions: StreamOptions
 
   get streamOptions(): StreamOptions {
     return this._streamOptions
@@ -135,10 +147,10 @@ export abstract class BaseMediaConnection {
     this._streamOptions = { ...this._streamOptions, ...options }
   }
 
+  abstract get serverId(): string | null
+
   stop(): void {
-    if (this.interval) {
-      clearInterval(this.interval)
-    }
+    this.interval && clearInterval(this.interval)
     this.status.started = false
     this.ws?.close()
     this.udp?.stop()
@@ -146,6 +158,7 @@ export abstract class BaseMediaConnection {
 
   setSession(session_id: string): void {
     this.session_id = session_id
+
     this.status.hasSession = true
     this.start()
   }
@@ -153,6 +166,7 @@ export abstract class BaseMediaConnection {
   setTokens(server: string, token: string): void {
     this.token = token
     this.server = server
+
     this.status.hasToken = true
     this.start()
   }
@@ -165,68 +179,35 @@ export abstract class BaseMediaConnection {
     if (this.status.hasSession && this.status.hasToken) {
       if (this.status.started) return
       this.status.started = true
-      this.initializeWebSocket()
-    }
-  }
 
-  initializeWebSocket(): void {
-    this.ws = new WebSocket(`wss://${this.server}/?v=7`, { followRedirects: true })
-    this.ws.on('open', this.handleOpen.bind(this))
-    this.ws.on('error', this.handleError.bind(this))
-    this.ws.on('close', this.handleClose.bind(this))
-    this.ws.on('message', this.handleMessage.bind(this))
-  }
-
-  handleOpen(): void {
-    if (this.status.resuming) {
-      this.status.resuming = false
-      this.resume()
-    } else {
-      this.identify()
-    }
-  }
-
-  handleError(err: Error): void {
-    console.error(err)
-  }
-
-  handleClose(code: number): void {
-    const wasStarted = this.status.started
-    this.status.started = false
-    this.udp.ready = false
-    const canResume = code === 4015 || code < 4000
-    if (canResume && wasStarted) {
-      this.status.resuming = true
-      this.start()
-    }
-  }
-
-  handleMessage(data: any): void {
-    const { op, d } = JSON.parse(data)
-    switch (op) {
-      case VoiceOpCodes.READY:
-        this.handleReady(d)
-        this.sendVoice()
-        this.setVideoStatus(false)
-        break
-      case VoiceOpCodes.HELLO:
-        this.setupHeartbeat(d.heartbeat_interval)
-        break
-      case VoiceOpCodes.SELECT_PROTOCOL_ACK:
-        this.handleSession(d)
-        break
-      case VoiceOpCodes.HEARTBEAT_ACK:
-      case VoiceOpCodes.SPEAKING:
-        break
-      case VoiceOpCodes.RESUMED:
-        this.status.started = true
-        this.udp.ready = true
-        break
-      default:
-        if (op >= 4000) {
-          console.error(`Error ${this.constructor.name} connection`, d)
+      this.ws = new ws('wss://' + this.server + '/?v=7', {
+        followRedirects: true,
+      })
+      this.ws.on('open', () => {
+        if (this.status.resuming) {
+          this.status.resuming = false
+          this.resume()
+        } else {
+          this.identify()
         }
-        break
+      })
+      this.ws.on('error', (err) => {
+        console.error(err)
+      })
+      this.ws.on('close', (code) => {
+        const wasStarted = this.status.started
+
+        this.status.started = false
+        this.udp.ready = false
+
+        const canResume = code === 4_015 || code < 4_000
+
+        if (canResume && wasStarted) {
+          this.status.resuming = true
+          this.start()
+        }
+      })
+      this.setupEvents()
     }
   }
 
@@ -234,17 +215,73 @@ export abstract class BaseMediaConnection {
     this.ssrc = d.ssrc
     this.address = d.ip
     this.port = d.port
-    this.modes = d.modes
-    this.videoSsrc = this.ssrc + 1
-    this.rtxSsrc = this.ssrc + 2
+
+    // select encryption mode
+    // From Discord docs:
+    // You must support aead_xchacha20_poly1305_rtpsize. You should prefer to use aead_aes256_gcm_rtpsize when it is available.
+    if (
+      d.modes.includes(SupportedEncryptionModes.AES256) &&
+      !this.streamOptions.forceChacha20Encryption
+    ) {
+      this.udp.encryptionMode = SupportedEncryptionModes.AES256
+    } else {
+      this.udp.encryptionMode = SupportedEncryptionModes.XCHACHA20
+    }
+
+    // we hardcoded the STREAMS_SIMULCAST, which will always be array of 1
+    const stream = d.streams[0]
+    this.videoSsrc = stream.ssrc
+    this.rtxSsrc = stream.rtx_ssrc
+
     this.udp.audioPacketizer.ssrc = this.ssrc
     this.udp.videoPacketizer.ssrc = this.videoSsrc
   }
 
-  handleSession(d: SessionMessage): void {
-    this.secretkey = new Uint8Array(d.secret_key)
+  handleProtocolAck(d: SelectProtocolAck): void {
+    this.secretkey = Buffer.from(d.secret_key)
+    this.secretkeyAes256 = webcrypto.subtle.importKey(
+      'raw',
+      this.secretkey,
+      {
+        name: 'AES-GCM',
+        length: 32,
+      },
+      false,
+      ['encrypt']
+    )
+    this.secretkeyChacha20 = new sp.CryptographyKey(this.secretkey)
+
     this.ready(this.udp)
     this.udp.ready = true
+  }
+
+  setupEvents(): void {
+    this.ws?.on('message', (data: any) => {
+      const { op, d } = JSON.parse(data)
+
+      if (op === VoiceOpCodes.READY) {
+        // ready
+        this.handleReady(d)
+        this.sendVoice()
+        this.setVideoStatus(false)
+      } else if (op >= 4000) {
+        console.error(`Error ${this.constructor.name} connection`, d)
+      } else if (op === VoiceOpCodes.HELLO) {
+        this.setupHeartbeat(d.heartbeat_interval)
+      } else if (op === VoiceOpCodes.SELECT_PROTOCOL_ACK) {
+        // session description
+        this.handleProtocolAck(d)
+      } else if (op === VoiceOpCodes.SPEAKING) {
+        // ignore speaking updates
+      } else if (op === VoiceOpCodes.HEARTBEAT_ACK) {
+        // ignore heartbeat acknowledgements
+      } else if (op === VoiceOpCodes.RESUMED) {
+        this.status.started = true
+        this.udp.ready = true
+      } else {
+        //console.log("unhandled voice event", {op, d});
+      }
+    })
   }
 
   setupHeartbeat(interval: number): void {
@@ -257,9 +294,17 @@ export abstract class BaseMediaConnection {
   }
 
   sendOpcode(code: number, data: any): void {
-    this.ws?.send(JSON.stringify({ op: code, d: data }))
+    this.ws?.send(
+      JSON.stringify({
+        op: code,
+        d: data,
+      })
+    )
   }
 
+  /*
+   ** identifies with media server with credentials
+   */
   identify(): void {
     this.sendOpcode(VoiceOpCodes.IDENTIFY, {
       server_id: this.serverId,
@@ -267,7 +312,7 @@ export abstract class BaseMediaConnection {
       session_id: this.session_id,
       token: this.token,
       video: true,
-      streams: [{ type: 'screen', rid: '100', quality: 100 }],
+      streams: STREAMS_SIMULCAST,
     })
   }
 
@@ -279,6 +324,11 @@ export abstract class BaseMediaConnection {
     })
   }
 
+  /*
+   ** Sets protocols and ip data used for video and audio.
+   ** Uses vp8 for video
+   ** Uses opus for audio
+   */
   setProtocols(ip: string, port: number): void {
     this.sendOpcode(VoiceOpCodes.SELECT_PROTOCOL, {
       protocol: 'udp',
@@ -299,8 +349,11 @@ export abstract class BaseMediaConnection {
       data: {
         address: ip,
         port: port,
-        mode: 'xsalsa20_poly1305_lite',
+        mode: this.udp.encryptionMode,
       },
+      address: ip,
+      port: port,
+      mode: this.udp.encryptionMode,
     })
   }
 
@@ -350,6 +403,10 @@ export abstract class BaseMediaConnection {
    ** Start media connection
    */
   sendVoice(): Promise<void> {
-    return this.udp.createUdp().then(() => undefined)
+    return new Promise<void>((resolve, _reject) => {
+      this.udp.createUdp().then(() => {
+        resolve()
+      })
+    })
   }
 }
