@@ -1,7 +1,6 @@
 import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
 import { MediaUdp } from '#src/client/voice/media_udp'
-import { extensions } from '#src/index'
-import { MAX_INT16BIT } from '#src/utils'
+import { extensions, MAX_INT16BIT } from '#src/utils'
 
 /**
  * VP8 payload format

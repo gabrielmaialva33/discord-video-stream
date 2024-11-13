@@ -6,7 +6,7 @@ import {
   splitNalu,
 } from '#src/client/processing/annex_bhelper'
 import { MediaUdp } from '#src/client/voice/media_udp'
-import { extensions } from '#src/index'
+import { extensions } from '#src/utils'
 
 /**
  * Annex B format

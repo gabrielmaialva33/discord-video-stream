@@ -1,6 +1,6 @@
 {
   "name": "@gabrielmaialva33/discord-video-stream",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Experiment for making video streaming work for discord self bots",
   "keywords": [
     "discord",
@@ -19,32 +19,19 @@
     "url": "https://github.com/gabrielmaialva33/discord-video-stream/issues"
   },
   "homepage": "https://github.com/gabrielmaialva33/discord-video-stream#readme",
-  "main": "./build/src/index.js",
-  "types": "./build/src/index.d.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
   "files": [
     "src",
-    "build"
+    "dist"
   ],
   "type": "module",
-  "exports": {
-    ".": {
-      "import": "./build/src/index.js",
-      "require": "./build/src/index.js"
-    },
-    "./client": {
-      "import": "./build/src/client/index.js",
-      "require": "./build/src/client/index.js"
-    },
-    "./media": {
-      "import": "./build/src/media/index.js",
-      "require": "./build/src/media/index.js"
-    }
-  },
+  "exports": "./dist/src/index.js",
   "imports": {
-    "#src/*": "./build/src/*.js",
-    "#src/client/*": "./build/src/client/*.js",
-    "#src/media/*": "./build/src/media/*.js",
-    "#src/util/*": "./build/src/util/*.js"
+    "#src/*": "./dist/src/*.js",
+    "#src/client/*": "./dist/src/client/*.js",
+    "#src/media/*": "./dist/src/media/*.js",
+    "#src/util/*": "./dist/src/util/*.js"
   },
   "engines": {
     "node": ">=22.11.0"
