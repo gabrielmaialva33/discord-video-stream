@@ -1,5 +1,4 @@
 import { PassThrough, Readable } from 'node:stream'
-
 import ffmpeg from 'fluent-ffmpeg'
 import PCancelable from 'p-cancelable'
 
@@ -9,8 +8,6 @@ import { AudioStream } from './audio_stream.js'
 
 import { normalizeVideoCodec } from '../utils.js'
 import { demux } from './libav_demuxer.js'
-
-// export let command: Ffmpeg.FfmpegCommand
 
 export function streamLivestreamVideo(
   input: string | Readable,
@@ -22,47 +19,49 @@ export function streamLivestreamVideo(
     const streamOpts = mediaUdp.mediaConnection.streamOptions
     const videoCodec = normalizeVideoCodec(streamOpts.videoCodec)
 
-    // ffmpeg setup
-    let headers: Record<string, string> = {
+    // Set default headers and merge with custom headers if provided
+    const defaultHeaders: Record<string, string> = {
       'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.3',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+        'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+        'Chrome/107.0.0.0 Safari/537.3',
       'Connection': 'keep-alive',
     }
+    const headers = { ...defaultHeaders, ...(customHeaders ?? {}) }
 
-    headers = { ...headers, ...(customHeaders ?? {}) }
-
+    // Determine if the input is an HTTP URL and if it's an HLS stream
     let isHttpUrl = false
     let isHls = false
 
     if (typeof input === 'string') {
-      isHttpUrl = input.startsWith('http') || input.startsWith('https')
-      isHls = input.includes('m3u')
+      isHttpUrl = input.startsWith('http://') || input.startsWith('https://')
+      isHls = input.includes('.m3u8') || input.includes('.m3u')
     }
 
     const ffmpegOutput = new PassThrough()
+
     try {
-      // command creation
+      // Create ffmpeg command
       const command = ffmpeg(input)
         .output(ffmpegOutput)
-        .addOption('-loglevel', '0')
+        .addOption('-loglevel', 'error') // Show only errors
         .on('end', () => {
           resolve('video ended')
         })
-        .on('error', (err, stdout, stderr) => {
-          console.log('ffmpeg error', stdout, stderr)
-          reject('cannot play video ' + err.message)
+        .on('error', (err) => {
+          console.error('ffmpeg error:', err.message)
+          reject('Cannot play video: ' + err.message)
         })
-        .on('stderr', console.error)
 
-      // general output options
+      // General output options
       command
         .size(`${streamOpts.width}x${streamOpts.height}`)
         .fpsOutput(streamOpts.fps)
         .videoBitrate(`${streamOpts.bitrateKbps}k`)
         .outputFormat('matroska')
 
-      // video setup
-      command.outputOption('-bf', '0')
+      // Video codec setup
+      command.outputOption('-bf', '0') // Disable B-frames for lower latency
       switch (videoCodec) {
         case 'AV1':
           command.videoCodec('libsvtav1')
@@ -77,98 +76,142 @@ export function streamLivestreamVideo(
           command
             .videoCodec('libx264')
             .outputOptions([
-              '-tune zerolatency',
-              '-pix_fmt yuv420p',
-              `-preset ${streamOpts.h26xPreset}`,
-              '-profile:v baseline',
-              `-g ${streamOpts.fps}`,
-              `-x264-params keyint=${streamOpts.fps}:min-keyint=${streamOpts.fps}`,
+              '-tune',
+              'zerolatency',
+              '-pix_fmt',
+              'yuv420p',
+              '-preset',
+              streamOpts.h26xPreset,
+              '-profile:v',
+              'baseline',
+              '-g',
+              streamOpts.fps.toString(),
+              '-x264-params',
+              `keyint=${streamOpts.fps}:min-keyint=${streamOpts.fps}`,
             ])
           break
         case 'H265':
           command
             .videoCodec('libx265')
             .outputOptions([
-              '-tune zerolatency',
-              '-pix_fmt yuv420p',
-              `-preset ${streamOpts.h26xPreset}`,
-              '-profile:v main',
-              `-g ${streamOpts.fps}`,
-              `-x265-params keyint=${streamOpts.fps}:min-keyint=${streamOpts.fps}`,
+              '-tune',
+              'zerolatency',
+              '-pix_fmt',
+              'yuv420p',
+              '-preset',
+              streamOpts.h26xPreset,
+              '-profile:v',
+              'main',
+              '-g',
+              streamOpts.fps.toString(),
+              '-x265-params',
+              `keyint=${streamOpts.fps}:min-keyint=${streamOpts.fps}`,
             ])
           break
+        default:
+          throw new Error(`Unsupported video codec: ${videoCodec}`)
       }
 
-      // audio setup
-      command.audioChannels(2).audioFrequency(48000).audioCodec('libopus')
-      //.audioBitrate('128k')
+      // Audio setup
+      if (includeAudio) {
+        command.audioChannels(2).audioFrequency(48000).audioCodec('libopus')
+        // .audioBitrate('128k'); // Uncomment if needed
+      } else {
+        command.noAudio() // Disable audio processing if not needed
+      }
 
-      if (streamOpts.hardwareAcceleratedDecoding) command.inputOption('-hwaccel', 'auto')
+      // Enable hardware acceleration if available
+      if (streamOpts.hardwareAcceleratedDecoding) {
+        command.inputOption('-hwaccel', 'auto')
+      }
 
-      command.inputOption('-re')
+      // Input options
+      command.inputOption('-re') // Read input at native frame rate
 
+      // Minimize latency options
       if (streamOpts.minimizeLatency) {
-        command.addOptions(['-fflags nobuffer', '-analyzeduration 0'])
+        command.addOptions(['-fflags', 'nobuffer', '-flags', 'low_delay', '-analyzeduration', '0'])
       }
 
+      // HTTP-specific options
       if (isHttpUrl) {
-        command.inputOption(
-          '-headers',
-          Object.keys(headers)
-            .map((key) => key + ': ' + headers[key])
-            .join('\r\n')
-        )
+        // Set custom headers
+        const headersOption = Object.entries(headers)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\r\n')
+        command.inputOption('-headers', headersOption)
+
+        // Reconnection options for non-HLS streams
         if (!isHls) {
           command.inputOptions([
-            '-reconnect 1',
-            '-reconnect_at_eof 1',
-            '-reconnect_streamed 1',
-            '-reconnect_delay_max 4294',
+            '-reconnect',
+            '1',
+            '-reconnect_at_eof',
+            '1',
+            '-reconnect_streamed',
+            '1',
+            '-reconnect_delay_max',
+            '2', // Reduced delay for faster reconnection
           ])
         }
       }
 
       command.run()
+
+      // Handle cancellation
       onCancel(() => command.kill('SIGINT'))
 
-      // demuxing
+      // Demux the ffmpeg output into separate audio and video streams
       const { video, audio } = await demux(ffmpegOutput).catch((e) => {
         command.kill('SIGINT')
         throw e
       })
-      const videoStream = new VideoStream(mediaUdp)
-      video!.stream.pipe(videoStream)
-      if (audio && includeAudio) {
-        const audioStream = new AudioStream(mediaUdp)
-        audio.stream.pipe(audioStream)
-        videoStream.syncStream = audioStream
-        audioStream.syncStream = videoStream
+
+      // Pipe video stream
+      if (video) {
+        const videoStream = new VideoStream(mediaUdp)
+        video.stream.pipe(videoStream)
+
+        // Pipe audio stream if included
+        if (includeAudio && audio) {
+          const audioStream = new AudioStream(mediaUdp)
+          audio.stream.pipe(audioStream)
+
+          // Synchronize video and audio streams
+          videoStream.syncStream = audioStream
+          audioStream.syncStream = videoStream
+        }
+      } else {
+        throw new Error('No video stream found')
       }
     } catch (e) {
-      //audioStream.end();
-      //videoStream.end();
-      reject('cannot play video ' + (e as Error).message)
+      // Clean up resources on error
+      ffmpegOutput.destroy()
+      reject('Cannot play video: ' + (e as Error).message)
     }
   })
 }
 
 export function getInputMetadata(input: string | Readable): Promise<ffmpeg.FfprobeData> {
   return new Promise((resolve, reject) => {
-    const instance = ffmpeg(input).on('error', (err, _stdout, _stderr) => reject(err))
+    const instance = ffmpeg(input).on('error', (err) => reject(err))
 
     instance.ffprobe((err, metadata) => {
-      if (err) reject(err)
+      if (err) {
+        reject(err)
+      } else {
+        resolve(metadata)
+      }
       instance.removeAllListeners()
-      resolve(metadata)
       instance.kill('SIGINT')
     })
   })
 }
 
 export function inputHasAudio(metadata: ffmpeg.FfprobeData) {
-  return metadata.streams.some((value) => value.codec_type === 'audio')
+  return metadata.streams.some((stream) => stream.codec_type === 'audio')
 }
 
 export function inputHasVideo(metadata: ffmpeg.FfprobeData) {
-  return metadata.streams.some((value) => value.codec_type === 'video')
+  return metadata.streams.some((stream) => stream.codec_type === 'video')
 }
