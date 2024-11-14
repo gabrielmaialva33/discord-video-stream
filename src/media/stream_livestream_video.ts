@@ -10,6 +10,8 @@ import { AudioStream } from './audio_stream.js'
 import { normalizeVideoCodec } from '../utils.js'
 import { demux } from './libav_demuxer.js'
 
+export let command: ffmpeg.FfmpegCommand
+
 export function streamLivestreamVideo(
   input: string | Readable,
   mediaUdp: MediaUdp,
@@ -40,7 +42,7 @@ export function streamLivestreamVideo(
     const ffmpegOutput = new PassThrough()
     try {
       // command creation
-      const command = ffmpeg(input)
+      command = ffmpeg(input)
         .output(ffmpegOutput)
         .addOption('-loglevel', '0')
         .on('end', () => {
