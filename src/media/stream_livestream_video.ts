@@ -9,8 +9,9 @@ import { AudioStream } from './audio_stream.js'
 
 import { normalizeVideoCodec } from '../utils.js'
 import { demux } from './libav_demuxer.js'
+import Ffmpeg from 'fluent-ffmpeg'
 
-export let command: ffmpeg.FfmpegCommand
+export let command: Ffmpeg.FfmpegCommand = ffmpeg()
 
 export function streamLivestreamVideo(
   input: string | Readable,
