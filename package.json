@@ -1,6 +1,6 @@
 {
   "name": "@gabrielmaialva33/discord-video-stream",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Experiment for making video streaming work for discord self bots",
   "keywords": [
     "discord",
