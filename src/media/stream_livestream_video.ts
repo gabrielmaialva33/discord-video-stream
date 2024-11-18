@@ -1,6 +1,7 @@
 import { PassThrough, Readable } from 'node:stream'
 
 import ffmpeg from 'fluent-ffmpeg'
+import Ffmpeg from 'fluent-ffmpeg'
 import PCancelable from 'p-cancelable'
 
 import { MediaUdp } from '../client/index.js'
@@ -9,7 +10,6 @@ import { AudioStream } from './audio_stream.js'
 
 import { normalizeVideoCodec } from '../utils.js'
 import { demux } from './libav_demuxer.js'
-import Ffmpeg from 'fluent-ffmpeg'
 
 export let command: Ffmpeg.FfmpegCommand = ffmpeg()
 
@@ -17,6 +17,7 @@ export function streamLivestreamVideo(
   input: string | Readable,
   mediaUdp: MediaUdp,
   includeAudio = true,
+  audioChannelIndex?: number,
   customHeaders?: Record<string, string>
 ) {
   return new PCancelable<string>(async (resolve, reject, onCancel) => {
@@ -102,6 +103,7 @@ export function streamLivestreamVideo(
 
       // audio setup
       command.audioChannels(2).audioFrequency(48000).audioCodec('libopus')
+      if (audioChannelIndex !== undefined) command.outputOptions(['-map 0:a:' + audioChannelIndex])
       //.audioBitrate('128k')
 
       if (streamOpts.hardwareAcceleratedDecoding) command.inputOption('-hwaccel', 'auto')
