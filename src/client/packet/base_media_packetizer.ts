@@ -76,9 +76,9 @@ export class BaseMediaPacketizer {
     return this._mediaUdp
   }
 
-  public async sendFrame(frame: Buffer, frametime: number): Promise<void> {
+  public async sendFrame(_frame: Buffer, frametime: number): Promise<void> {
     // override this
-    console.log('sendFrame', frame, frametime)
+    console.log('send_frame.frametime', frametime)
     this._lastPacketTime = Date.now()
   }
 
@@ -87,7 +87,9 @@ export class BaseMediaPacketizer {
     bytesSent: number,
     frametime: number
   ): Promise<void> {
-    console.log('onFrameSent', packetsSent, bytesSent, frametime)
+    console.log('on_frame_sent.packets_sent', packetsSent)
+    console.log('on_frame_sent.bytes_sent', bytesSent)
+    console.log('on_frame_sent.frametime', frametime)
     if (!this._mediaUdp.mediaConnection.streamOptions.rtcpSenderReportEnabled) return
 
     this._totalPackets = this._totalPackets + packetsSent
