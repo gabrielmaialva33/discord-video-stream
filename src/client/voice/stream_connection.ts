@@ -4,25 +4,25 @@ import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
 export class StreamConnection extends BaseMediaConnection {
   private _streamKey: string | null = null
 
-  get streamKey(): string | null {
+  public get streamKey(): string | null {
     return this._streamKey
   }
 
-  set streamKey(value: string) {
+  public set streamKey(value: string) {
     this._streamKey = value
   }
 
   private _serverId: string | null = null
 
-  override get serverId(): string | null {
+  public override get serverId(): string | null {
     return this._serverId
   }
 
-  set serverId(id: string) {
+  public set serverId(id: string) {
     this._serverId = id
   }
 
-  override setSpeaking(speaking: boolean): void {
+  public override setSpeaking(speaking: boolean): void {
     this.sendOpcode(VoiceOpCodes.SPEAKING, {
       delay: 0,
       speaking: speaking ? 2 : 0,

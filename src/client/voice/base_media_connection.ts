@@ -1,7 +1,6 @@
 import { webcrypto } from 'node:crypto'
 
 import sp from 'sodium-plus'
-import ws from 'ws'
 
 import {
   normalizeVideoCodec,
@@ -92,24 +91,24 @@ const defaultStreamOptions: StreamOptions = {
 }
 
 export abstract class BaseMediaConnection {
-  udp: MediaUdp
-  guildId: string
-  channelId: string
-  botId: string
-  ws: ws | null = null
-  ready: (udp: MediaUdp) => void
-  status: VoiceConnectionStatus
-  server: string | null = null //websocket url
-  token: string | null = null
-  session_id: string | null = null
-  address: string | null = null
-  port: number | null = null
-  ssrc: number | null = null
-  videoSsrc: number | null = null
-  rtxSsrc: number | null = null
-  secretkey: Buffer | null = null
-  secretkeyAes256: Promise<webcrypto.CryptoKey> | null = null
-  secretkeyChacha20: sp.CryptographyKey | null = null
+  public udp: MediaUdp
+  public guildId: string
+  public channelId: string
+  public botId: string
+  public ws: WebSocket | null = null
+  public ready: (udp: MediaUdp) => void
+  public status: VoiceConnectionStatus
+  public server: string | null = null //websocket url
+  public token: string | null = null
+  public session_id: string | null = null
+  public address: string | null = null
+  public port: number | null = null
+  public ssrc: number | null = null
+  public videoSsrc: number | null = null
+  public rtxSsrc: number | null = null
+  public secretkey: Buffer | null = null
+  public secretkeyAes256: Promise<webcrypto.CryptoKey> | null = null
+  public secretkeyChacha20: sp.CryptographyKey | null = null
   private interval: NodeJS.Timeout | null = null
 
   constructor(
@@ -139,15 +138,15 @@ export abstract class BaseMediaConnection {
 
   private _streamOptions: StreamOptions
 
-  get streamOptions(): StreamOptions {
+  public get streamOptions(): StreamOptions {
     return this._streamOptions
   }
 
-  set streamOptions(options: Partial<StreamOptions>) {
+  public set streamOptions(options: Partial<StreamOptions>) {
     this._streamOptions = { ...this._streamOptions, ...options }
   }
 
-  abstract get serverId(): string | null
+  public abstract get serverId(): string | null
 
   stop(): void {
     this.interval && clearInterval(this.interval)
@@ -180,10 +179,9 @@ export abstract class BaseMediaConnection {
       if (this.status.started) return
       this.status.started = true
 
-      this.ws = new ws('wss://' + this.server + '/?v=7', {
-        followRedirects: true,
-      })
-      this.ws.on('open', () => {
+      this.ws = new WebSocket('wss://' + this.server + '/?v=7', {})
+
+      this.ws?.addEventListener('open', () => {
         if (this.status.resuming) {
           this.status.resuming = false
           this.resume()
@@ -191,22 +189,25 @@ export abstract class BaseMediaConnection {
           this.identify()
         }
       })
-      this.ws.on('error', (err) => {
+
+      this.ws.addEventListener('error', (err) => {
         console.error(err)
       })
-      this.ws.on('close', (code) => {
+
+      this.ws.addEventListener('close', (event) => {
         const wasStarted = this.status.started
 
         this.status.started = false
         this.udp.ready = false
 
-        const canResume = code === 4_015 || code < 4_000
+        const canResume = event.code === 4_015 || event.code < 4_000
 
         if (canResume && wasStarted) {
           this.status.resuming = true
           this.start()
         }
       })
+
       this.setupEvents()
     }
   }
@@ -256,10 +257,10 @@ export abstract class BaseMediaConnection {
   }
 
   setupEvents(): void {
-    this.ws?.on('message', (data: any) => {
-      const { op, d } = JSON.parse(data)
+    this.ws?.addEventListener('message', (event) => {
+      const { op, d } = JSON.parse(event.data)
 
-      if (op === VoiceOpCodes.READY) {
+      if (op == VoiceOpCodes.READY) {
         // ready
         this.handleReady(d)
         this.sendVoice()
@@ -362,7 +363,7 @@ export abstract class BaseMediaConnection {
    ** bool -> video on or off
    ** video and rtx sources are set to ssrc + 1 and ssrc + 2
    */
-  setVideoStatus(bool: boolean): void {
+  public setVideoStatus(bool: boolean): void {
     this.sendOpcode(VoiceOpCodes.VIDEO, {
       audio_ssrc: this.ssrc,
       video_ssrc: bool ? this.videoSsrc : 0,
@@ -391,7 +392,7 @@ export abstract class BaseMediaConnection {
    ** Set speaking status
    ** speaking -> speaking status on or off
    */
-  setSpeaking(speaking: boolean): void {
+  public setSpeaking(speaking: boolean): void {
     this.sendOpcode(VoiceOpCodes.SPEAKING, {
       delay: 0,
       speaking: speaking ? 1 : 0,
@@ -402,7 +403,7 @@ export abstract class BaseMediaConnection {
   /*
    ** Start media connection
    */
-  sendVoice(): Promise<void> {
+  public sendVoice(): Promise<void> {
     return new Promise<void>((resolve, _reject) => {
       this.udp.createUdp().then(() => {
         resolve()

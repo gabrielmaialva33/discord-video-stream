@@ -4,6 +4,7 @@ import sp from 'sodium-plus'
 
 import { MediaUdp } from '#src/client/voice/media_udp'
 import { MAX_INT16BIT, MAX_INT32BIT, SupportedEncryptionModes } from '#src/utils'
+import { Log } from 'debug-level'
 
 const { SodiumPlus } = sp
 
@@ -12,7 +13,8 @@ const ntpEpoch = new Date('Jan 01 1900 GMT').getTime()
 let sodium: Promise<sp.SodiumPlus> | undefined
 
 export class BaseMediaPacketizer {
-  private readonly _payloadType: number
+  private _loggerRtcpSr = new Log('packetizer:rtcp-sr')
+  private _payloadType: number
   private _sequence: number
   private _timestamp: number
   private _totalBytes: number
@@ -39,18 +41,18 @@ export class BaseMediaPacketizer {
 
   private _ssrc: number
 
-  get ssrc(): number {
+  public get ssrc(): number {
     return this._ssrc
   }
 
-  set ssrc(value: number) {
+  public set ssrc(value: number) {
     this._ssrc = value
     this._totalBytes = this._totalPackets = this._prevTotalPackets = 0
   }
 
   private _mtu: number
 
-  get mtu(): number {
+  public get mtu(): number {
     return this._mtu
   }
 
@@ -60,26 +62,32 @@ export class BaseMediaPacketizer {
    * The interval (number of packets) between 2 consecutive RTCP Sender
    * Report packets
    */
-  get srInterval(): number {
+  public get srInterval(): number {
     return this._srInterval
   }
 
-  set srInterval(interval: number) {
+  public set srInterval(interval: number) {
     this._srInterval = interval
   }
 
   private _mediaUdp: MediaUdp
 
-  get mediaUdp(): MediaUdp {
+  public get mediaUdp(): MediaUdp {
     return this._mediaUdp
   }
 
-  async sendFrame(_frame: Buffer): Promise<void> {
+  public async sendFrame(frame: Buffer, frametime: number): Promise<void> {
     // override this
+    console.log('sendFrame', frame, frametime)
     this._lastPacketTime = Date.now()
   }
 
-  async onFrameSent(packetsSent: number, bytesSent: number): Promise<void> {
+  public async onFrameSent(
+    packetsSent: number,
+    bytesSent: number,
+    frametime: number
+  ): Promise<void> {
+    console.log('onFrameSent', packetsSent, bytesSent, frametime)
     if (!this._mediaUdp.mediaConnection.streamOptions.rtcpSenderReportEnabled) return
 
     this._totalPackets = this._totalPackets + packetsSent
@@ -95,6 +103,17 @@ export class BaseMediaPacketizer {
       const senderReport = await this.makeRtcpSenderReport()
       this._mediaUdp.sendPacket(senderReport)
       this._prevTotalPackets = this._totalPackets
+      this._loggerRtcpSr.debug(
+        {
+          stats: {
+            ssrc: this._ssrc,
+            timestamp: this._timestamp,
+            totalPackets: this._totalPackets,
+            totalBytes: this._totalBytes,
+          },
+        },
+        `Sent RTCP sender report for SSRC ${this._ssrc}`
+      )
     }
   }
 
@@ -103,7 +122,7 @@ export class BaseMediaPacketizer {
    * @param data buffer to be partitioned
    * @returns array of chunks
    */
-  partitionDataMTUSizedChunks(data: Buffer): Buffer[] {
+  public partitionDataMTUSizedChunks(data: Buffer): Buffer[] {
     let i = 0
     let len = data.length
 
@@ -119,16 +138,16 @@ export class BaseMediaPacketizer {
     return out
   }
 
-  getNewSequence(): number {
+  public getNewSequence(): number {
     this._sequence = (this._sequence + 1) % MAX_INT16BIT
     return this._sequence
   }
 
-  incrementTimestamp(incrementBy: number): void {
+  public incrementTimestamp(incrementBy: number): void {
     this._timestamp = (this._timestamp + incrementBy) % MAX_INT32BIT
   }
 
-  makeRtpHeader(isLastPacket: boolean = true): Buffer {
+  public makeRtpHeader(isLastPacket: boolean = true): Buffer {
     const packetHeader = Buffer.alloc(12)
 
     packetHeader[0] = (2 << 6) | ((this._extensionEnabled ? 1 : 0) << 4) // set version and flags
@@ -141,7 +160,7 @@ export class BaseMediaPacketizer {
     return packetHeader
   }
 
-  async makeRtcpSenderReport(): Promise<Buffer> {
+  public async makeRtcpSenderReport(): Promise<Buffer> {
     const packetHeader = Buffer.allocUnsafe(8)
 
     packetHeader[0] = 0x80 // RFC1889 v2, no padding, no reception report count
@@ -179,7 +198,7 @@ export class BaseMediaPacketizer {
    * https://www.rfc-editor.org/rfc/rfc5285#section-4.2
    * @returns extension header
    */
-  createExtensionHeader(extensions: { id: number; len: number; val: number }[]): Buffer {
+  public createExtensionHeader(extensions: { id: number; len: number; val: number }[]): Buffer {
     /**
      *  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
      +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -200,7 +219,7 @@ export class BaseMediaPacketizer {
    * to their webrtc gateway using the webclient and the client will send an SDP offer containing it
    * @returns extension payload
    */
-  createExtensionPayload(extensions: { id: number; len: number; val: number }[]): Buffer {
+  public createExtensionPayload(extensions: { id: number; len: number; val: number }[]): Buffer {
     const extensionsData = []
     for (let ext of extensions) {
       /**
@@ -284,7 +303,7 @@ export class BaseMediaPacketizer {
    * @param additionalData
    * @returns ciphertext
    */
-  async encryptData(
+  public async encryptData(
     plaintext: Buffer,
     nonceBuffer: Buffer,
     additionalData: Buffer

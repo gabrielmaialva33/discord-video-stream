@@ -4,6 +4,7 @@ import { extensions, MAX_INT16BIT } from '#src/utils'
 
 /**
  * VP8 payload format
+ *
  */
 export class VideoPacketizerVP8 extends BaseMediaPacketizer {
   private _pictureId: number
@@ -14,8 +15,8 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
     this.srInterval = 5 * connection.mediaConnection.streamOptions.fps * 3 // ~5 seconds, assuming ~3 packets per frame
   }
 
-  override async sendFrame(frame: Buffer): Promise<void> {
-    super.sendFrame(frame)
+  public override async sendFrame(frame: Buffer, frametime: number): Promise<void> {
+    super.sendFrame(frame, frametime)
     const data = this.partitionDataMTUSizedChunks(frame)
 
     let bytesSent = 0
@@ -27,10 +28,14 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
       bytesSent += packet.length
     }
 
-    await this.onFrameSent(data.length, bytesSent)
+    await this.onFrameSent(data.length, bytesSent, frametime)
   }
 
-  async createPacket(chunk: any, isLastPacket = true, isFirstPacket = true): Promise<Buffer> {
+  public async createPacket(
+    chunk: any,
+    isLastPacket = true,
+    isFirstPacket = true
+  ): Promise<Buffer> {
     if (chunk.length > this.mtu)
       throw Error('error packetizing video frame: frame is larger than mtu')
 
@@ -53,10 +58,14 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
     ])
   }
 
-  override async onFrameSent(packetsSent: number, bytesSent: number): Promise<void> {
-    await super.onFrameSent(packetsSent, bytesSent)
+  public override async onFrameSent(
+    packetsSent: number,
+    bytesSent: number,
+    frametime: number
+  ): Promise<void> {
+    await super.onFrameSent(packetsSent, bytesSent, frametime)
     // video RTP packet timestamp incremental value = 90,000Hz / fps
-    this.incrementTimestamp(90000 / this.mediaUdp.mediaConnection.streamOptions.fps)
+    this.incrementTimestamp((90000 / 1000) * frametime)
     this.incrementPictureId()
   }
 

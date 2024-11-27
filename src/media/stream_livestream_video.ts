@@ -17,7 +17,6 @@ export function streamLivestreamVideo(
   input: string | Readable,
   mediaUdp: MediaUdp,
   includeAudio = true,
-  audioChannelIndex?: number,
   customHeaders?: Record<string, string>
 ) {
   return new PCancelable<string>(async (resolve, reject, onCancel) => {
@@ -44,14 +43,13 @@ export function streamLivestreamVideo(
     const ffmpegOutput = new PassThrough()
     try {
       // command creation
-      command = ffmpeg(input)
+      const command = ffmpeg(input)
         .output(ffmpegOutput)
         .addOption('-loglevel', '0')
         .on('end', () => {
           resolve('video ended')
         })
-        .on('error', (err, stdout, stderr) => {
-          console.log('ffmpeg error', stdout, stderr)
+        .on('error', (err, _stdout, _stderr) => {
           reject('cannot play video ' + err.message)
         })
         .on('stderr', console.error)
@@ -103,12 +101,9 @@ export function streamLivestreamVideo(
 
       // audio setup
       command.audioChannels(2).audioFrequency(48000).audioCodec('libopus')
-      if (audioChannelIndex !== undefined) command.outputOptions(['-map 0:a:' + audioChannelIndex])
       //.audioBitrate('128k')
 
       if (streamOpts.hardwareAcceleratedDecoding) command.inputOption('-hwaccel', 'auto')
-
-      command.inputOption('-re')
 
       if (streamOpts.minimizeLatency) {
         command.addOptions(['-fflags nobuffer', '-analyzeduration 0'])

@@ -17,15 +17,15 @@ export class Streamer {
 
   private _voiceConnection?: VoiceConnection
 
-  get voiceConnection(): VoiceConnection | undefined {
+  public get voiceConnection(): VoiceConnection | undefined {
     return this._voiceConnection
   }
 
-  get client(): Client {
+  public get client(): Client {
     return this._client
   }
 
-  sendOpcode(code: number, data: any): void {
+  public sendOpcode(code: number, data: any): void {
     // @ts-ignore
     this.client.ws.broadcast({
       op: code,
@@ -33,7 +33,7 @@ export class Streamer {
     })
   }
 
-  joinVoice(
+  public joinVoice(
     guild_id: string,
     channel_id: string,
     options?: Partial<StreamOptions>
@@ -56,7 +56,7 @@ export class Streamer {
     })
   }
 
-  createStream(options?: Partial<StreamOptions>): Promise<MediaUdp> {
+  public createStream(options?: Partial<StreamOptions>): Promise<MediaUdp> {
     return new Promise<MediaUdp>((resolve, reject) => {
       if (!this.client.user) {
         reject('Client not logged in')
@@ -81,7 +81,7 @@ export class Streamer {
     })
   }
 
-  stopStream(): void {
+  public stopStream(): void {
     const stream = this.voiceConnection?.streamConnection
 
     if (!stream) return
@@ -93,7 +93,7 @@ export class Streamer {
     this.voiceConnection.streamConnection = undefined
   }
 
-  leaveVoice(): void {
+  public leaveVoice(): void {
     this.voiceConnection?.stop()
 
     this.signalLeaveVoice()
@@ -101,7 +101,7 @@ export class Streamer {
     this._voiceConnection = undefined
   }
 
-  signalVideo(guild_id: string, channel_id: string, video_enabled: boolean): void {
+  public signalVideo(guild_id: string, channel_id: string, video_enabled: boolean): void {
     this.sendOpcode(GatewayOpCodes.VOICE_STATE_UPDATE, {
       guild_id,
       channel_id,
@@ -111,7 +111,7 @@ export class Streamer {
     })
   }
 
-  signalStream(guild_id: string, channel_id: string): void {
+  public signalStream(guild_id: string, channel_id: string): void {
     this.sendOpcode(GatewayOpCodes.STREAM_CREATE, {
       type: 'guild',
       guild_id,
@@ -125,13 +125,13 @@ export class Streamer {
     })
   }
 
-  signalStopStream(guild_id: string, channel_id: string): void {
+  public signalStopStream(guild_id: string, channel_id: string): void {
     this.sendOpcode(GatewayOpCodes.STREAM_DELETE, {
       stream_key: `guild:${guild_id}:${channel_id}:${this.client.user!.id}`,
     })
   }
 
-  signalLeaveVoice(): void {
+  public signalLeaveVoice(): void {
     this.sendOpcode(GatewayOpCodes.VOICE_STATE_UPDATE, {
       guild_id: null,
       channel_id: null,
@@ -152,17 +152,18 @@ export class Streamer {
       }
       case 'VOICE_SERVER_UPDATE': {
         // transfer voice server update to voice connection
-        if (data.guild_id !== this.voiceConnection?.guildId) return
+        if (data.guild_id != this.voiceConnection?.guildId) return
 
         this.voiceConnection?.setTokens(data.endpoint, data.token)
         break
       }
       case 'STREAM_CREATE': {
         const [type, guildId, channelId, userId] = data.stream_key.split(':')
-
-        console.log('STREAM_CREATE.stream_key', type, guildId, channelId, userId)
-
-        if (this.voiceConnection?.guildId !== guildId) return
+        console.log('STREAM_CREATE.type', type)
+        console.log('STREAM_CREATE.guildId', guildId)
+        console.log('STREAM_CREATE.channelId', channelId)
+        console.log('STREAM_CREATE.userId', userId)
+        if (this.voiceConnection?.guildId != guildId) return
 
         if (userId === this.client.user!.id) {
           this.voiceConnection!.streamConnection!.serverId = data.rtc_server_id
@@ -174,8 +175,11 @@ export class Streamer {
       }
       case 'STREAM_SERVER_UPDATE': {
         const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log('STREAM_SERVER_UPDATE.stream_key', type, guildId, channelId, userId)
-        if (this.voiceConnection?.guildId !== guildId) return
+        console.log('STREAM_SERVER_UPDATE.type', type)
+        console.log('STREAM_SERVER_UPDATE.guildId', guildId)
+        console.log('STREAM_SERVER_UPDATE.channelId', channelId)
+        console.log('STREAM_SERVER_UPDATE.userId', userId)
+        if (this.voiceConnection?.guildId != guildId) return
 
         if (userId === this.client.user!.id) {
           this.voiceConnection!.streamConnection!.setTokens(data.endpoint, data.token)

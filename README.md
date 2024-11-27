@@ -35,6 +35,10 @@
 
 <br>
 
+> [!CAUTION]
+> Using any kind of automation programs on your account can result in your account getting permanently banned by
+> Discord. Use at your own risk
+
 ## :bookmark: About
 
 This project implements the custom Discord UDP protocol for sending media. Since Discord is likely change their custom
@@ -90,7 +94,10 @@ Extensions supported by Discord (taken from the webrtc sdp exchange)
   distribution's package manager.
 
   ```sh
+    # For Ubuntu
     $ sudo apt-get install ffmpeg
+    # For MacOS
+    $ brew install ffmpeg
   ```
 
 - **[discord.js-selfbot-v13](https://www.npmjs.com/package/discord.js-selfbot-v13)** is required for the usage of this
@@ -140,7 +147,7 @@ try {
 
 <br>
 
-### :arrow_down: \*\*FAQS
+### :arrow_down: FAQS
 
 - Can I stream on existing voice connection (CAM) and in a go-live connection simultaneously?
 
@@ -167,7 +174,11 @@ This project is under the **MIT** license. [MIT](./LICENSE) ❤️
 | --------------------------------------------------------------------------------------------------------- |
 | [Maia](https://github.com/gabrielmaialva33)                                                               |
 
-Made with ❤️ by Maia 👋🏽 [Get in touch!](https://t.me/mrootx)
+### Special Thanks
+
+A huge thank you to [mrjvs](https://github.com/mrjvs) for their inspiring work
+on [Discord-video-experiment](https://github.com/mrjvs/Discord-video-experiment). Their contributions have been
+invaluable!
 
 ## :star:
 

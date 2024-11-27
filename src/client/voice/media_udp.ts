@@ -55,43 +55,43 @@ export class MediaUdp {
 
   private _mediaConnection: BaseMediaConnection
 
-  get mediaConnection(): BaseMediaConnection {
+  public get mediaConnection(): BaseMediaConnection {
     return this._mediaConnection
   }
 
   private _ready: boolean = false
 
-  get ready(): boolean {
+  public get ready(): boolean {
     return this._ready
   }
 
-  set ready(val: boolean) {
+  public set ready(val: boolean) {
     this._ready = val
   }
 
   private _audioPacketizer: BaseMediaPacketizer
 
-  get audioPacketizer(): BaseMediaPacketizer {
+  public get audioPacketizer(): BaseMediaPacketizer {
     return this._audioPacketizer
   }
 
   private _videoPacketizer: BaseMediaPacketizer
 
-  get videoPacketizer(): BaseMediaPacketizer {
+  public get videoPacketizer(): BaseMediaPacketizer {
     return this._videoPacketizer
   }
 
   private _encryptionMode: SupportedEncryptionModes | undefined
 
-  get encryptionMode(): SupportedEncryptionModes | undefined {
+  public get encryptionMode(): SupportedEncryptionModes | undefined {
     return this._encryptionMode
   }
 
-  set encryptionMode(mode: SupportedEncryptionModes) {
+  public set encryptionMode(mode: SupportedEncryptionModes) {
     this._encryptionMode = mode
   }
 
-  getNewNonceBuffer(): Buffer {
+  public getNewNonceBuffer(): Buffer {
     const nonceBuffer =
       this._encryptionMode === SupportedEncryptionModes.AES256 ? Buffer.alloc(12) : Buffer.alloc(24)
     this._nonce = (this._nonce + 1) % MAX_INT32BIT
@@ -100,17 +100,17 @@ export class MediaUdp {
     return nonceBuffer
   }
 
-  async sendAudioFrame(frame: Buffer): Promise<void> {
+  public async sendAudioFrame(frame: Buffer, frametime: number): Promise<void> {
     if (!this.ready) return
-    await this.audioPacketizer.sendFrame(frame)
+    await this.audioPacketizer.sendFrame(frame, frametime)
   }
 
-  async sendVideoFrame(frame: Buffer): Promise<void> {
+  public async sendVideoFrame(frame: Buffer, frametime: number): Promise<void> {
     if (!this.ready) return
-    await this.videoPacketizer.sendFrame(frame)
+    await this.videoPacketizer.sendFrame(frame, frametime)
   }
 
-  sendPacket(packet: Buffer): Promise<void> {
+  public sendPacket(packet: Buffer): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       try {
         this._socket?.send(
@@ -119,7 +119,7 @@ export class MediaUdp {
           packet.length,
           this._mediaConnection.port!,
           this._mediaConnection.address!,
-          (error: any, _bytes: any) => {
+          (error, _bytes) => {
             if (error) {
               console.log('ERROR', error)
               reject(error)
@@ -133,18 +133,18 @@ export class MediaUdp {
     })
   }
 
-  handleIncoming(_buf: any): void {
-    //console.log("RECEIVED PACKET", buf);
+  handleIncoming(buf: any): void {
+    console.log('RECEIVED PACKET', buf)
   }
 
-  stop(): void {
+  public stop(): void {
     try {
       this.ready = false
       this._socket?.disconnect()
     } catch (e) {}
   }
 
-  createUdp(): Promise<void> {
+  public createUdp(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       this._socket = udpCon.createSocket('udp4')
 
@@ -180,7 +180,7 @@ export class MediaUdp {
         blank.length,
         this._mediaConnection.port!,
         this._mediaConnection.address!,
-        (error: any, _bytes: any) => {
+        (error, _bytes) => {
           if (error) {
             reject(error)
           }
