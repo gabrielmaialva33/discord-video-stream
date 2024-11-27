@@ -14,7 +14,7 @@
     "url": "git+https://github.com/gabrielmaialva33/discord-video-stream.git"
   },
   "author": "Maia <gabrielmaialva33>",
-  "license": "MIT",
+  "license": "ISC",
   "bugs": {
     "url": "https://github.com/gabrielmaialva33/discord-video-stream/issues"
   },
