@@ -1,6 +1,7 @@
 import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
 import { MediaUdp } from '#src/client/voice/media_udp'
 import { extensions, MAX_INT16BIT } from '#src/utils'
+import { CodecPayloadType } from '../voice/index.js'
 
 /**
  * VP8 payload format
@@ -10,7 +11,7 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
   private _pictureId: number
 
   constructor(connection: MediaUdp) {
-    super(connection, 0x65, true)
+    super(connection, CodecPayloadType.VP8.payload_type, true)
     this._pictureId = 0
     this.srInterval = 5 * connection.mediaConnection.streamOptions.fps * 3 // ~5 seconds, assuming ~3 packets per frame
   }

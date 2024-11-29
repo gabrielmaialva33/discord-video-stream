@@ -7,6 +7,7 @@ import {
 } from '#src/client/processing/annex_bhelper'
 import { MediaUdp } from '#src/client/voice/media_udp'
 import { extensions } from '#src/utils'
+import { CodecPayloadType } from '../voice/index.js'
 
 /**
  * Annex B format
@@ -60,8 +61,8 @@ import { extensions } from '#src/utils'
 class VideoPacketizerAnnexB extends BaseMediaPacketizer {
   private _nalFunctions: AnnexBHelpers
 
-  constructor(connection: MediaUdp, nalFunctions: AnnexBHelpers) {
-    super(connection, 0x65, true)
+  constructor(connection: MediaUdp, payloadType: number, nalFunctions: AnnexBHelpers) {
+    super(connection, payloadType, true)
     this.srInterval = 5 * connection.mediaConnection.streamOptions.fps * 3 // ~5 seconds, assuming ~3 packets per frame
     this._nalFunctions = nalFunctions
   }
@@ -163,14 +164,16 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
     isLastPacket: boolean,
     naluHeader: Buffer
   ): Buffer {
-    console.log('makeFragmentationUnitHeader', isFirstPacket, isLastPacket, naluHeader)
+    console.log('isFirstPacket', isFirstPacket)
+    console.log('isLastPacket', isLastPacket)
+    console.log('naluHeader', naluHeader)
     throw new Error('Not implemented')
   }
 }
 
 export class VideoPacketizerH264 extends VideoPacketizerAnnexB {
   constructor(connection: MediaUdp) {
-    super(connection, H264Helpers)
+    super(connection, CodecPayloadType.H264.payload_type, H264Helpers)
   }
 
   /**
@@ -231,7 +234,7 @@ export class VideoPacketizerH264 extends VideoPacketizerAnnexB {
 
 export class VideoPacketizerH265 extends VideoPacketizerAnnexB {
   constructor(connection: MediaUdp) {
-    super(connection, H265Helpers)
+    super(connection, CodecPayloadType.H265.payload_type, H265Helpers)
   }
 
   /**

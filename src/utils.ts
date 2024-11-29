@@ -24,3 +24,7 @@ export const extensions = [{ id: 5, len: 2, val: 0 }]
 
 export const MAX_INT16BIT = 2 ** 16
 export const MAX_INT32BIT = 2 ** 32
+
+export function isFiniteNonZero(n: number | undefined): n is number {
+  return !!n && isFinite(n)
+}

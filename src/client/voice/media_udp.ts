@@ -28,35 +28,13 @@ function parseLocalPacket(message: Buffer) {
 }
 
 export class MediaUdp {
+  private readonly _mediaConnection: BaseMediaConnection
   private _nonce: number
   private _socket: udpCon.Socket | null = null
 
   constructor(voiceConnection: BaseMediaConnection) {
     this._nonce = 0
-
     this._mediaConnection = voiceConnection
-    this._audioPacketizer = new AudioPacketizer(this)
-
-    const videoCodec = normalizeVideoCodec(this.mediaConnection.streamOptions.videoCodec)
-    switch (videoCodec) {
-      case 'H264':
-        this._videoPacketizer = new VideoPacketizerH264(this)
-        break
-      case 'H265':
-        this._videoPacketizer = new VideoPacketizerH265(this)
-        break
-      case 'VP8':
-        this._videoPacketizer = new VideoPacketizerVP8(this)
-        break
-      default:
-        throw new Error(`Packetizer not implemented for ${videoCodec}`)
-    }
-  }
-
-  private _mediaConnection: BaseMediaConnection
-
-  public get mediaConnection(): BaseMediaConnection {
-    return this._mediaConnection
   }
 
   private _ready: boolean = false
@@ -69,16 +47,17 @@ export class MediaUdp {
     this._ready = val
   }
 
-  private _audioPacketizer: BaseMediaPacketizer
+  private _audioPacketizer?: BaseMediaPacketizer
 
   public get audioPacketizer(): BaseMediaPacketizer {
-    return this._audioPacketizer
+    return this._audioPacketizer!
   }
 
-  private _videoPacketizer: BaseMediaPacketizer
+  private _videoPacketizer?: BaseMediaPacketizer
 
   public get videoPacketizer(): BaseMediaPacketizer {
-    return this._videoPacketizer
+    // This will never be undefined anyway, so it's safe
+    return this._videoPacketizer!
   }
 
   private _encryptionMode: SupportedEncryptionModes | undefined
@@ -89,6 +68,22 @@ export class MediaUdp {
 
   public set encryptionMode(mode: SupportedEncryptionModes) {
     this._encryptionMode = mode
+  }
+
+  private _ip?: string
+
+  public get ip() {
+    return this._ip
+  }
+
+  private _port?: number
+
+  public get port() {
+    return this._port
+  }
+
+  public get mediaConnection(): BaseMediaConnection {
+    return this._mediaConnection
   }
 
   public getNewNonceBuffer(): Buffer {
@@ -108,6 +103,26 @@ export class MediaUdp {
   public async sendVideoFrame(frame: Buffer, frametime: number): Promise<void> {
     if (!this.ready) return
     await this.videoPacketizer.sendFrame(frame, frametime)
+  }
+
+  public updatePacketizer(): void {
+    this._audioPacketizer = new AudioPacketizer(this)
+    this._audioPacketizer.ssrc = this._mediaConnection.ssrc!
+    const videoCodec = normalizeVideoCodec(this.mediaConnection.streamOptions.videoCodec)
+    switch (videoCodec) {
+      case 'H264':
+        this._videoPacketizer = new VideoPacketizerH264(this)
+        break
+      case 'H265':
+        this._videoPacketizer = new VideoPacketizerH265(this)
+        break
+      case 'VP8':
+        this._videoPacketizer = new VideoPacketizerVP8(this)
+        break
+      default:
+        throw new Error(`Packetizer not implemented for ${videoCodec}`)
+    }
+    this._videoPacketizer.ssrc = this._mediaConnection.videoSsrc!
   }
 
   public sendPacket(packet: Buffer): Promise<void> {
@@ -134,7 +149,7 @@ export class MediaUdp {
   }
 
   handleIncoming(buf: any): void {
-    console.log('RECEIVED PACKET', buf)
+    // console.log('RECEIVED PACKET', buf)
   }
 
   public stop(): void {
@@ -159,7 +174,9 @@ export class MediaUdp {
         }
         try {
           const packet = parseLocalPacket(message)
-          this._mediaConnection.setProtocols(packet.ip, packet.port)
+          this._ip = packet.ip
+          this._port = packet.port
+          this._ready = true
         } catch (e) {
           reject(e)
         }

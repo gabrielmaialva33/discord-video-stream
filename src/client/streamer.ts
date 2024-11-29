@@ -48,11 +48,11 @@ export class Streamer {
         this.client.user.id,
         channel_id,
         options ?? {},
-        (voiceUdp) => {
-          resolve(voiceUdp)
+        (udp) => {
+          udp.mediaConnection.setProtocols().then(() => resolve(udp))
         }
       )
-      this.signalVideo(guild_id, channel_id, false)
+      this.signalVideo(false)
     })
   }
 
@@ -67,15 +67,15 @@ export class Streamer {
         return
       }
 
-      this.signalStream(this.voiceConnection.guildId, this.voiceConnection.channelId)
+      this.signalStream()
 
       this.voiceConnection.streamConnection = new StreamConnection(
         this.voiceConnection.guildId,
         this.client.user.id,
         this.voiceConnection.channelId,
         options ?? {},
-        (voiceUdp) => {
-          resolve(voiceUdp)
+        (udp) => {
+          udp.mediaConnection.setProtocols().then(() => resolve(udp))
         }
       )
     })
@@ -88,7 +88,7 @@ export class Streamer {
 
     stream.stop()
 
-    this.signalStopStream(stream.guildId, stream.channelId)
+    this.signalStopStream()
 
     this.voiceConnection.streamConnection = undefined
   }
@@ -101,7 +101,9 @@ export class Streamer {
     this._voiceConnection = undefined
   }
 
-  public signalVideo(guild_id: string, channel_id: string, video_enabled: boolean): void {
+  public signalVideo(video_enabled: boolean): void {
+    if (!this.voiceConnection) return
+    const { guildId: guild_id, channelId: channel_id } = this.voiceConnection
     this.sendOpcode(GatewayOpCodes.VOICE_STATE_UPDATE, {
       guild_id,
       channel_id,
@@ -111,7 +113,9 @@ export class Streamer {
     })
   }
 
-  public signalStream(guild_id: string, channel_id: string): void {
+  public signalStream(): void {
+    if (!this.voiceConnection) return
+    const { guildId: guild_id, channelId: channel_id } = this.voiceConnection
     this.sendOpcode(GatewayOpCodes.STREAM_CREATE, {
       type: 'guild',
       guild_id,
@@ -125,7 +129,9 @@ export class Streamer {
     })
   }
 
-  public signalStopStream(guild_id: string, channel_id: string): void {
+  public signalStopStream(): void {
+    if (!this.voiceConnection) return
+    const { guildId: guild_id, channelId: channel_id } = this.voiceConnection
     this.sendOpcode(GatewayOpCodes.STREAM_DELETE, {
       stream_key: `guild:${guild_id}:${channel_id}:${this.client.user!.id}`,
     })
@@ -158,11 +164,7 @@ export class Streamer {
         break
       }
       case 'STREAM_CREATE': {
-        const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log('STREAM_CREATE.type', type)
-        console.log('STREAM_CREATE.guildId', guildId)
-        console.log('STREAM_CREATE.channelId', channelId)
-        console.log('STREAM_CREATE.userId', userId)
+        const [_type, guildId, _channelId, userId] = data.stream_key.split(':')
         if (this.voiceConnection?.guildId != guildId) return
 
         if (userId === this.client.user!.id) {
@@ -174,11 +176,7 @@ export class Streamer {
         break
       }
       case 'STREAM_SERVER_UPDATE': {
-        const [type, guildId, channelId, userId] = data.stream_key.split(':')
-        console.log('STREAM_SERVER_UPDATE.type', type)
-        console.log('STREAM_SERVER_UPDATE.guildId', guildId)
-        console.log('STREAM_SERVER_UPDATE.channelId', channelId)
-        console.log('STREAM_SERVER_UPDATE.userId', userId)
+        const [_type, guildId, _channelId, userId] = data.stream_key.split(':')
         if (this.voiceConnection?.guildId != guildId) return
 
         if (userId === this.client.user!.id) {

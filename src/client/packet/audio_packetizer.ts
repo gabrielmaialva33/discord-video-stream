@@ -1,9 +1,10 @@
 import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
 import { MediaUdp } from '#src/client/voice/media_udp'
+import { CodecPayloadType } from '../voice/index.js'
 
 export class AudioPacketizer extends BaseMediaPacketizer {
   constructor(connection: MediaUdp) {
-    super(connection, 0x78)
+    super(connection, CodecPayloadType.opus.payload_type)
     this.srInterval = (5 * 1000) / 20 // ~5 seconds for 20ms frame time
   }
 

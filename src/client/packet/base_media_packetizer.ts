@@ -14,14 +14,16 @@ let sodium: Promise<sp.SodiumPlus> | undefined
 
 export class BaseMediaPacketizer {
   private _loggerRtcpSr = new Log('packetizer:rtcp-sr')
-  private _payloadType: number
+  private readonly _payloadType: number
+  private readonly _mtu: number
   private _sequence: number
   private _timestamp: number
   private _totalBytes: number
   private _totalPackets: number
   private _prevTotalPackets: number
   private _lastPacketTime: number
-  private _extensionEnabled: boolean
+  private readonly _mediaUdp: MediaUdp
+  private readonly _extensionEnabled: boolean
 
   constructor(connection: MediaUdp, payloadType: number, extensionEnabled = false) {
     this._mediaUdp = connection
@@ -35,25 +37,18 @@ export class BaseMediaPacketizer {
     this._mtu = 1200
     this._extensionEnabled = extensionEnabled
 
-    this._ssrc = 0
     this._srInterval = 512 // Sane fallback value for interval
   }
 
-  private _ssrc: number
+  private _ssrc?: number
 
-  public get ssrc(): number {
+  public get ssrc(): number | undefined {
     return this._ssrc
   }
 
   public set ssrc(value: number) {
     this._ssrc = value
     this._totalBytes = this._totalPackets = this._prevTotalPackets = 0
-  }
-
-  private _mtu: number
-
-  public get mtu(): number {
-    return this._mtu
   }
 
   private _srInterval: number
@@ -70,26 +65,24 @@ export class BaseMediaPacketizer {
     this._srInterval = interval
   }
 
-  private _mediaUdp: MediaUdp
-
   public get mediaUdp(): MediaUdp {
     return this._mediaUdp
   }
 
-  public async sendFrame(_frame: Buffer, frametime: number): Promise<void> {
-    // override this
-    console.log('send_frame.frametime', frametime)
+  public get mtu(): number {
+    return this._mtu
+  }
+
+  public async sendFrame(_frame: Buffer, _frametime: number): Promise<void> {
+    // override this method
     this._lastPacketTime = Date.now()
   }
 
   public async onFrameSent(
     packetsSent: number,
     bytesSent: number,
-    frametime: number
+    _frametime: number
   ): Promise<void> {
-    console.log('on_frame_sent.packets_sent', packetsSent)
-    console.log('on_frame_sent.bytes_sent', bytesSent)
-    console.log('on_frame_sent.frametime', frametime)
     if (!this._mediaUdp.mediaConnection.streamOptions.rtcpSenderReportEnabled) return
 
     this._totalPackets = this._totalPackets + packetsSent
@@ -150,6 +143,8 @@ export class BaseMediaPacketizer {
   }
 
   public makeRtpHeader(isLastPacket: boolean = true): Buffer {
+    if (!this._ssrc) throw new Error('SSRC is not set')
+
     const packetHeader = Buffer.alloc(12)
 
     packetHeader[0] = (2 << 6) | ((this._extensionEnabled ? 1 : 0) << 4) // set version and flags
@@ -163,6 +158,8 @@ export class BaseMediaPacketizer {
   }
 
   public async makeRtcpSenderReport(): Promise<Buffer> {
+    if (!this._ssrc) throw new Error('SSRC is not set')
+
     const packetHeader = Buffer.allocUnsafe(8)
 
     packetHeader[0] = 0x80 // RFC1889 v2, no padding, no reception report count

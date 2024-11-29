@@ -2,21 +2,71 @@ import { webcrypto } from 'node:crypto'
 
 import sp from 'sodium-plus'
 
-import {
-  normalizeVideoCodec,
-  STREAMS_SIMULCAST,
-  SupportedEncryptionModes,
-  SupportedVideoCodec,
-} from '#src/utils'
+import { STREAMS_SIMULCAST, SupportedEncryptionModes, SupportedVideoCodec } from '#src/utils'
 import { MediaUdp } from '#src/client/voice/media_udp'
 import { ReadyMessage, SelectProtocolAck } from '#src/client/voice/voice_message_types'
 import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
+import EventEmitter from 'node:events'
 
 type VoiceConnectionStatus = {
   hasSession: boolean
   hasToken: boolean
   started: boolean
   resuming: boolean
+}
+
+export const CodecPayloadType = {
+  opus: {
+    name: 'opus',
+    type: 'audio',
+    priority: 1000,
+    payload_type: 120,
+  },
+  H264: {
+    name: 'H264',
+    type: 'video',
+    priority: 1000,
+    payload_type: 101,
+    rtx_payload_type: 102,
+    encode: true,
+    decode: true,
+  },
+  H265: {
+    name: 'H265',
+    type: 'video',
+    priority: 1000,
+    payload_type: 103,
+    rtx_payload_type: 104,
+    encode: true,
+    decode: true,
+  },
+  VP8: {
+    name: 'VP8',
+    type: 'video',
+    priority: 1000,
+    payload_type: 105,
+    rtx_payload_type: 106,
+    encode: true,
+    decode: true,
+  },
+  VP9: {
+    name: 'VP9',
+    type: 'video',
+    priority: 1000,
+    payload_type: 107,
+    rtx_payload_type: 108,
+    encode: true,
+    decode: true,
+  },
+  AV1: {
+    name: 'AV1',
+    type: 'video',
+    priority: 1000,
+    payload_type: 107,
+    rtx_payload_type: 108,
+    encode: true,
+    decode: true,
+  },
 }
 
 export interface StreamOptions {
@@ -90,7 +140,7 @@ const defaultStreamOptions: StreamOptions = {
   forceChacha20Encryption: false,
 }
 
-export abstract class BaseMediaConnection {
+export abstract class BaseMediaConnection extends EventEmitter {
   public udp: MediaUdp
   public guildId: string
   public channelId: string
@@ -110,6 +160,7 @@ export abstract class BaseMediaConnection {
   public secretkeyAes256: Promise<webcrypto.CryptoKey> | null = null
   public secretkeyChacha20: sp.CryptographyKey | null = null
   private interval: NodeJS.Timeout | null = null
+  private _supportedEncryptionMode?: SupportedEncryptionModes[]
 
   constructor(
     guildId: string,
@@ -118,6 +169,7 @@ export abstract class BaseMediaConnection {
     options: Partial<StreamOptions>,
     callback: (udp: MediaUdp) => void
   ) {
+    super()
     this.status = {
       hasSession: false,
       hasToken: false,
@@ -207,7 +259,6 @@ export abstract class BaseMediaConnection {
           this.start()
         }
       })
-
       this.setupEvents()
     }
   }
@@ -216,26 +267,13 @@ export abstract class BaseMediaConnection {
     this.ssrc = d.ssrc
     this.address = d.ip
     this.port = d.port
-
-    // select encryption mode
-    // From Discord docs:
-    // You must support aead_xchacha20_poly1305_rtpsize. You should prefer to use aead_aes256_gcm_rtpsize when it is available.
-    if (
-      d.modes.includes(SupportedEncryptionModes.AES256) &&
-      !this.streamOptions.forceChacha20Encryption
-    ) {
-      this.udp.encryptionMode = SupportedEncryptionModes.AES256
-    } else {
-      this.udp.encryptionMode = SupportedEncryptionModes.XCHACHA20
-    }
+    this._supportedEncryptionMode = d.modes
 
     // we hardcoded the STREAMS_SIMULCAST, which will always be array of 1
     const stream = d.streams[0]
     this.videoSsrc = stream.ssrc
     this.rtxSsrc = stream.rtx_ssrc
-
-    this.udp.audioPacketizer.ssrc = this.ssrc
-    this.udp.videoPacketizer.ssrc = this.videoSsrc
+    this.udp.updatePacketizer()
   }
 
   handleProtocolAck(d: SelectProtocolAck): void {
@@ -251,9 +289,7 @@ export abstract class BaseMediaConnection {
       ['encrypt']
     )
     this.secretkeyChacha20 = new sp.CryptographyKey(this.secretkey)
-
-    this.ready(this.udp)
-    this.udp.ready = true
+    this.emit('select_protocol_ack')
   }
 
   setupEvents(): void {
@@ -263,7 +299,7 @@ export abstract class BaseMediaConnection {
       if (op == VoiceOpCodes.READY) {
         // ready
         this.handleReady(d)
-        this.sendVoice()
+        this.sendVoice().then(() => this.ready(this.udp))
         this.setVideoStatus(false)
       } else if (op >= 4000) {
         console.error(`Error ${this.constructor.name} connection`, d)
@@ -330,31 +366,33 @@ export abstract class BaseMediaConnection {
    ** Uses vp8 for video
    ** Uses opus for audio
    */
-  setProtocols(ip: string, port: number): void {
-    this.sendOpcode(VoiceOpCodes.SELECT_PROTOCOL, {
-      protocol: 'udp',
-      codecs: [
-        { name: 'opus', type: 'audio', priority: 1000, payload_type: 120 },
-        {
-          name: normalizeVideoCodec(this.streamOptions.videoCodec),
-          type: 'video',
-          priority: 1000,
-          payload_type: 101,
-          rtx_payload_type: 102,
-          encode: true,
-          decode: true,
+  setProtocols(): Promise<void> {
+    const { ip, port } = this.udp
+    // select encryption mode
+    // From Discord docs:
+    // You must support aead_xchacha20_poly1305_rtpsize. You should prefer to use aead_aes256_gcm_rtpsize when it is available.
+    if (
+      this._supportedEncryptionMode!.includes(SupportedEncryptionModes.AES256) &&
+      !this.streamOptions.forceChacha20Encryption
+    ) {
+      this.udp.encryptionMode = SupportedEncryptionModes.AES256
+    } else {
+      this.udp.encryptionMode = SupportedEncryptionModes.XCHACHA20
+    }
+    return new Promise((resolve) => {
+      this.sendOpcode(VoiceOpCodes.SELECT_PROTOCOL, {
+        protocol: 'udp',
+        codecs: Object.values(CodecPayloadType),
+        data: {
+          address: ip,
+          port: port,
+          mode: this.udp.encryptionMode,
         },
-        //{ name: "VP8", type: "video", priority: 3000, payload_type: 103, rtx_payload_type: 104, encode: true, decode: true }
-        //{ name: "VP9", type: "video", priority: 3000, payload_type: 105, rtx_payload_type: 106 },
-      ],
-      data: {
         address: ip,
         port: port,
         mode: this.udp.encryptionMode,
-      },
-      address: ip,
-      port: port,
-      mode: this.udp.encryptionMode,
+      })
+      this.once('select_protocol_ack', () => resolve())
     })
   }
 
@@ -404,10 +442,6 @@ export abstract class BaseMediaConnection {
    ** Start media connection
    */
   public sendVoice(): Promise<void> {
-    return new Promise<void>((resolve, _reject) => {
-      this.udp.createUdp().then(() => {
-        resolve()
-      })
-    })
+    return this.udp.createUdp()
   }
 }
