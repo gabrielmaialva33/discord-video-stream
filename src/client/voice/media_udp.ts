@@ -148,7 +148,7 @@ export class MediaUdp {
     })
   }
 
-  handleIncoming(buf: any): void {
+  handleIncoming(_buf: any): void {
     // console.log('RECEIVED PACKET', buf)
   }
 
