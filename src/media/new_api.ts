@@ -158,7 +158,7 @@ export function prepareStream(input: string | Readable, options: Partial<Encoder
   const output = new PassThrough()
 
   // command creation
-  const command = ffmpeg(input).output(output).addOption('-loglevel', '0')
+  const command = ffmpeg(input).addOption('-loglevel', '0')
 
   // input options
   let { hardwareAcceleratedDecoding, minimizeLatency, customHeaders } = mergedOptions
@@ -172,7 +172,7 @@ export function prepareStream(input: string | Readable, options: Partial<Encoder
     command.inputOption(
       '-headers',
       Object.entries(customHeaders)
-        .map((k, v) => `${k}: ${v}`)
+        .map(([k, v]) => `${k}: ${v}`)
         .join('\r\n')
     )
     if (!isHls) {
@@ -186,12 +186,12 @@ export function prepareStream(input: string | Readable, options: Partial<Encoder
   }
 
   // general output options
-  command.outputFormat('matroska')
+  command.output(output).outputFormat('matroska')
 
   // video setup
   let { width, height, frameRate, bitrateVideo, bitrateVideoMax, videoCodec, h26xPreset } =
     mergedOptions
-  command.map('0:v')
+  command.addOutputOption('-map 0:v')
   command.videoFilter(`scale=${width}:${height}`)
 
   if (frameRate) command.fpsOutput(frameRate)
@@ -235,7 +235,7 @@ export function prepareStream(input: string | Readable, options: Partial<Encoder
   let { includeAudio, bitrateAudio } = mergedOptions
   if (includeAudio)
     command
-      .map('0:a?')
+      .addOutputOption('-map 0:a?')
       .audioChannels(2)
       /*
        * I don't have much surround sound material to test this with,
