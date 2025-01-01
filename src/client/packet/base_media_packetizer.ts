@@ -136,9 +136,15 @@ export class BaseMediaPacketizer {
     packetHeader[1] = this._payloadType // set packet payload
     if (isLastPacket) packetHeader[1] |= 0b10000000 // mark M bit if last frame
 
-    packetHeader.writeUIntBE(this.getNewSequence(), 2, 2)
-    packetHeader.writeUIntBE(this._timestamp, 4, 4)
-    packetHeader.writeUIntBE(this._ssrc, 8, 4)
+    // Ensure the sequence is within the valid range for 16 bits
+    const sequence = this.getNewSequence() % 0x10000
+    if (sequence < 0 || sequence > 0xffff) {
+      throw new RangeError(`Sequence out of range: ${sequence}`)
+    }
+
+    packetHeader.writeUInt16BE(sequence, 2) // Write the 16-bit sequence number
+    packetHeader.writeUInt32BE(this._timestamp, 4) // Write the 32-bit timestamp
+    packetHeader.writeUInt32BE(this._ssrc, 8) // Write the 32-bit SSRC
     return packetHeader
   }
 
