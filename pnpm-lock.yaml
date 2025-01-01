@@ -61,9 +61,6 @@ importers:
       '@types/fluent-ffmpeg':
         specifier: ^2.1.27
         version: 2.1.27
-      '@types/libsodium-wrappers':
-        specifier: ^0.7.14
-        version: 0.7.14
       '@types/node':
         specifier: ^22.10.3
         version: 22.10.3
@@ -240,9 +237,6 @@ packages:
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
-
-  '@types/libsodium-wrappers@0.7.14':
-    resolution: {integrity: sha512-5Kv68fXuXK0iDuUir1WPGw2R9fOZUlYlSAa0ztMcL0s0BfIDTqg9GXz8K30VJpPP3sxWhbolnQma2x+/TfkzDQ==}
 
   '@types/node-fetch@2.6.11':
     resolution: {integrity: sha512-24xFj9R5+rfQJLRyM56qh+wnVSYhyXC2tkoBndtY0U+vubqNsYXGjufB2nn8Q6gt0LrARwL6UBtMCSVCwl4B1g==}
@@ -1557,8 +1551,6 @@ snapshots:
       '@types/node': 22.10.3
 
   '@types/json-schema@7.0.15': {}
-
-  '@types/libsodium-wrappers@0.7.14': {}
 
   '@types/node-fetch@2.6.11':
     dependencies:
