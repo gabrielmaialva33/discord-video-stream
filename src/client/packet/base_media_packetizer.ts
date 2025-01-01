@@ -1,27 +1,24 @@
-import { webcrypto } from 'node:crypto'
-
-import sp from 'sodium-plus'
-
-import { MediaUdp } from '#src/client/voice/media_udp'
-import { MAX_INT16BIT, MAX_INT32BIT, SupportedEncryptionModes } from '#src/utils'
 import { Log } from 'debug-level'
-
-const { SodiumPlus } = sp
+import { MediaUdp } from '../voice/index.js'
+import { MAX_INT32BIT } from '../../utils.js'
 
 const ntpEpoch = new Date('Jan 01 1900 GMT').getTime()
 
-let sodium: Promise<sp.SodiumPlus> | undefined
-
 export class BaseMediaPacketizer {
   private _loggerRtcpSr = new Log('packetizer:rtcp-sr')
+
+  private _ssrc?: number
   private readonly _payloadType: number
   private readonly _mtu: number
   private _sequence: number
   private _timestamp: number
+
   private _totalBytes: number
   private _totalPackets: number
   private _prevTotalPackets: number
   private _lastPacketTime: number
+  private _srInterval: number
+
   private readonly _mediaUdp: MediaUdp
   private readonly _extensionEnabled: boolean
 
@@ -40,8 +37,6 @@ export class BaseMediaPacketizer {
     this._srInterval = 512 // Sane fallback value for interval
   }
 
-  private _ssrc?: number
-
   public get ssrc(): number | undefined {
     return this._ssrc
   }
@@ -50,8 +45,6 @@ export class BaseMediaPacketizer {
     this._ssrc = value
     this._totalBytes = this._totalPackets = this._prevTotalPackets = 0
   }
-
-  private _srInterval: number
 
   /**
    * The interval (number of packets) between 2 consecutive RTCP Sender
@@ -65,16 +58,8 @@ export class BaseMediaPacketizer {
     this._srInterval = interval
   }
 
-  public get mediaUdp(): MediaUdp {
-    return this._mediaUdp
-  }
-
-  public get mtu(): number {
-    return this._mtu
-  }
-
   public async sendFrame(_frame: Buffer, _frametime: number): Promise<void> {
-    // override this method
+    // override this
     this._lastPacketTime = Date.now()
   }
 
@@ -134,7 +119,7 @@ export class BaseMediaPacketizer {
   }
 
   public getNewSequence(): number {
-    this._sequence = (this._sequence + 1) % MAX_INT16BIT
+    this._sequence = (this._sequence + 1) % MAX_INT32BIT
     return this._sequence
   }
 
@@ -184,12 +169,8 @@ export class BaseMediaPacketizer {
     senderReport.writeUInt32BE(this._totalPackets % MAX_INT32BIT, 12)
     senderReport.writeUInt32BE(this._totalBytes, 16)
 
-    const nonceBuffer = this._mediaUdp.getNewNonceBuffer()
-    return Buffer.concat([
-      packetHeader,
-      await this.encryptData(senderReport, nonceBuffer, packetHeader),
-      nonceBuffer.subarray(0, 4),
-    ])
+    const [ciphertext, nonceBuffer] = await this.encryptData(senderReport, packetHeader)
+    return Buffer.concat([packetHeader, ciphertext, nonceBuffer.subarray(0, 4)])
   }
 
   /**
@@ -302,36 +283,18 @@ export class BaseMediaPacketizer {
    * @param additionalData
    * @returns ciphertext
    */
-  public async encryptData(
-    plaintext: Buffer,
-    nonceBuffer: Buffer,
-    additionalData: Buffer
-  ): Promise<Buffer> {
-    switch (this._mediaUdp.encryptionMode) {
-      case SupportedEncryptionModes.AES256:
-        return Buffer.from(
-          await webcrypto.subtle.encrypt(
-            {
-              name: 'AES-GCM',
-              iv: nonceBuffer,
-              additionalData,
-            },
-            await this._mediaUdp.mediaConnection.secretkeyAes256!,
-            plaintext
-          )
-        )
-      case SupportedEncryptionModes.XCHACHA20:
-        if (!sodium) sodium = SodiumPlus.auto()
-        return await sodium.then((s) =>
-          s.crypto_aead_xchacha20poly1305_ietf_encrypt(
-            plaintext,
-            nonceBuffer,
-            this._mediaUdp.mediaConnection.secretkeyChacha20!,
-            additionalData
-          )
-        )
-      default:
-        throw new Error('Unsupported encryption mode')
-    }
+  public encryptData(plaintext: Buffer, additionalData: Buffer): Promise<[Buffer, Buffer]> {
+    const encryptor = this._mediaUdp.mediaConnection.transportEncryptor
+    if (!encryptor)
+      throw new Error('Transport encryptor not defined. Did you forget to select protocol?')
+    return encryptor.encrypt(plaintext, additionalData)
+  }
+
+  public get mediaUdp(): MediaUdp {
+    return this._mediaUdp
+  }
+
+  public get mtu(): number {
+    return this._mtu
   }
 }

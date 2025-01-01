@@ -1,12 +1,15 @@
-import { webcrypto } from 'node:crypto'
-
-import sp from 'sodium-plus'
-
-import { STREAMS_SIMULCAST, SupportedEncryptionModes, SupportedVideoCodec } from '#src/utils'
-import { MediaUdp } from '#src/client/voice/media_udp'
-import { ReadyMessage, SelectProtocolAck } from '#src/client/voice/voice_message_types'
-import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
+import WebSocket from 'ws'
 import EventEmitter from 'node:events'
+
+import { STREAMS_SIMULCAST, SupportedEncryptionModes, SupportedVideoCodec } from '../../utils.js'
+import { MediaUdp } from './media_udp.js'
+import {
+  AES256TransportEncryptor,
+  Chacha20TransportEncryptor,
+  TransportEncryptor,
+} from '../encryptor/transport_encryptor.js'
+import { ReadyMessage, SelectProtocolAck } from './voice_message_types.js'
+import { VoiceOpCodes } from './voice_op_codes.js'
 
 type VoiceConnectionStatus = {
   hasSession: boolean
@@ -141,6 +144,7 @@ const defaultStreamOptions: StreamOptions = {
 }
 
 export abstract class BaseMediaConnection extends EventEmitter {
+  private interval: NodeJS.Timeout | null = null
   public udp: MediaUdp
   public guildId: string
   public channelId: string
@@ -156,10 +160,8 @@ export abstract class BaseMediaConnection extends EventEmitter {
   public ssrc: number | null = null
   public videoSsrc: number | null = null
   public rtxSsrc: number | null = null
-  public secretkey: Buffer | null = null
-  public secretkeyAes256: Promise<webcrypto.CryptoKey> | null = null
-  public secretkeyChacha20: sp.CryptographyKey | null = null
-  private interval: NodeJS.Timeout | null = null
+  private _streamOptions: StreamOptions
+  private _transportEncryptor?: TransportEncryptor
   private _supportedEncryptionMode?: SupportedEncryptionModes[]
 
   constructor(
@@ -188,7 +190,7 @@ export abstract class BaseMediaConnection extends EventEmitter {
     this.ready = callback
   }
 
-  private _streamOptions: StreamOptions
+  public abstract get serverId(): string | null
 
   public get streamOptions(): StreamOptions {
     return this._streamOptions
@@ -198,7 +200,9 @@ export abstract class BaseMediaConnection extends EventEmitter {
     this._streamOptions = { ...this._streamOptions, ...options }
   }
 
-  public abstract get serverId(): string | null
+  public get transportEncryptor() {
+    return this._transportEncryptor
+  }
 
   stop(): void {
     this.interval && clearInterval(this.interval)
@@ -231,9 +235,10 @@ export abstract class BaseMediaConnection extends EventEmitter {
       if (this.status.started) return
       this.status.started = true
 
-      this.ws = new WebSocket('wss://' + this.server + '/?v=7', {})
-
-      this.ws?.addEventListener('open', () => {
+      this.ws = new WebSocket('wss://' + this.server + '/?v=7', {
+        followRedirects: true,
+      })
+      this.ws.on('open', () => {
         if (this.status.resuming) {
           this.status.resuming = false
           this.resume()
@@ -241,18 +246,16 @@ export abstract class BaseMediaConnection extends EventEmitter {
           this.identify()
         }
       })
-
-      this.ws.addEventListener('error', (err) => {
+      this.ws.on('error', (err) => {
         console.error(err)
       })
-
-      this.ws.addEventListener('close', (event) => {
+      this.ws.on('close', (code) => {
         const wasStarted = this.status.started
 
         this.status.started = false
         this.udp.ready = false
 
-        const canResume = event.code === 4_015 || event.code < 4_000
+        const canResume = code === 4_015 || code < 4_000
 
         if (canResume && wasStarted) {
           this.status.resuming = true
@@ -277,24 +280,21 @@ export abstract class BaseMediaConnection extends EventEmitter {
   }
 
   handleProtocolAck(d: SelectProtocolAck): void {
-    this.secretkey = Buffer.from(d.secret_key)
-    this.secretkeyAes256 = webcrypto.subtle.importKey(
-      'raw',
-      this.secretkey,
-      {
-        name: 'AES-GCM',
-        length: 32,
-      },
-      false,
-      ['encrypt']
-    )
-    this.secretkeyChacha20 = new sp.CryptographyKey(this.secretkey)
+    const secretKey = Buffer.from(d.secret_key)
+    switch (d.mode) {
+      case SupportedEncryptionModes.AES256:
+        this._transportEncryptor = new AES256TransportEncryptor(secretKey)
+        break
+      case SupportedEncryptionModes.XCHACHA20:
+        this._transportEncryptor = new Chacha20TransportEncryptor(secretKey)
+        break
+    }
     this.emit('select_protocol_ack')
   }
 
   setupEvents(): void {
-    this.ws?.addEventListener('message', (event) => {
-      const { op, d } = JSON.parse(event.data)
+    this.ws?.on('message', (data: any) => {
+      const { op, d } = JSON.parse(data)
 
       if (op == VoiceOpCodes.READY) {
         // ready
@@ -371,13 +371,14 @@ export abstract class BaseMediaConnection extends EventEmitter {
     // select encryption mode
     // From Discord docs:
     // You must support aead_xchacha20_poly1305_rtpsize. You should prefer to use aead_aes256_gcm_rtpsize when it is available.
+    let encryptionMode: SupportedEncryptionModes
     if (
       this._supportedEncryptionMode!.includes(SupportedEncryptionModes.AES256) &&
       !this.streamOptions.forceChacha20Encryption
     ) {
-      this.udp.encryptionMode = SupportedEncryptionModes.AES256
+      encryptionMode = SupportedEncryptionModes.AES256
     } else {
-      this.udp.encryptionMode = SupportedEncryptionModes.XCHACHA20
+      encryptionMode = SupportedEncryptionModes.XCHACHA20
     }
     return new Promise((resolve) => {
       this.sendOpcode(VoiceOpCodes.SELECT_PROTOCOL, {
@@ -386,11 +387,11 @@ export abstract class BaseMediaConnection extends EventEmitter {
         data: {
           address: ip,
           port: port,
-          mode: this.udp.encryptionMode,
+          mode: encryptionMode,
         },
         address: ip,
         port: port,
-        mode: this.udp.encryptionMode,
+        mode: encryptionMode,
       })
       this.once('select_protocol_ack', () => resolve())
     })

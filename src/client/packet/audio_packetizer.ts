@@ -8,22 +8,18 @@ export class AudioPacketizer extends BaseMediaPacketizer {
     this.srInterval = (5 * 1000) / 20 // ~5 seconds for 20ms frame time
   }
 
-  public override async sendFrame(frame: Buffer, frametime: number): Promise<void> {
-    super.sendFrame(frame, frametime)
+  public override async sendFrame(frame: Buffer, frameTime: number): Promise<void> {
+    super.sendFrame(frame, frameTime)
     const packet = await this.createPacket(frame)
     this.mediaUdp.sendPacket(packet)
-    this.onFrameSent(packet.length, frametime)
+    this.onFrameSent(packet.length, frameTime)
   }
 
   public async createPacket(chunk: Buffer): Promise<Buffer> {
     const header = this.makeRtpHeader()
 
-    const nonceBuffer = this.mediaUdp.getNewNonceBuffer()
-    return Buffer.concat([
-      header,
-      await this.encryptData(chunk, nonceBuffer, header),
-      nonceBuffer.subarray(0, 4),
-    ])
+    const [ciphertext, nonceBuffer] = await this.encryptData(chunk, header)
+    return Buffer.concat([header, ciphertext, nonceBuffer.subarray(0, 4)])
   }
 
   public override async onFrameSent(bytesSent: number, frametime: number): Promise<void> {

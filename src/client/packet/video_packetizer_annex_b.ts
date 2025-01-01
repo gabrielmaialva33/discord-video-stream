@@ -1,13 +1,7 @@
-import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
-import {
-  AnnexBHelpers,
-  H264Helpers,
-  H265Helpers,
-  splitNalu,
-} from '#src/client/processing/annex_bhelper'
-import { MediaUdp } from '#src/client/voice/media_udp'
-import { extensions } from '#src/utils'
-import { CodecPayloadType } from '../voice/index.js'
+import { BaseMediaPacketizer } from './base_media_packetizer.js'
+import { AnnexBHelpers, H264Helpers, H265Helpers, splitNalu } from '../processing/annex_bhelper.js'
+import { CodecPayloadType, MediaUdp } from '../voice/index.js'
+import { extensions } from '../../utils.js'
 
 /**
  * Annex B format
@@ -89,16 +83,11 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
           this.createExtensionHeader(extensions),
         ])
 
-        const nonceBuffer = this.mediaUdp.getNewNonceBuffer()
-        const packet = Buffer.concat([
-          packetHeader,
-          await this.encryptData(
-            Buffer.concat([this.createExtensionPayload(extensions), nalu]),
-            nonceBuffer,
-            packetHeader
-          ),
-          nonceBuffer.subarray(0, 4),
-        ])
+        const [ciphertext, nonceBuffer] = await this.encryptData(
+          Buffer.concat([this.createExtensionPayload(extensions), nalu]),
+          packetHeader
+        )
+        const packet = Buffer.concat([packetHeader, ciphertext, nonceBuffer.subarray(0, 4)])
         this.mediaUdp.sendPacket(packet)
         packetsSent++
         bytesSent += packet.length
@@ -124,16 +113,11 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
             this.makeFragmentationUnitHeader(isFirstPacket, isFinalPacket, naluHeader),
             data[i],
           ])
-          // nonce buffer used for encryption. 4 bytes are appended to end of packet
-          const nonceBuffer = this.mediaUdp.getNewNonceBuffer()
+
           encryptedPackets.push(
-            (async () => {
-              return Buffer.concat([
-                packetHeader,
-                await this.encryptData(packetData, nonceBuffer, packetHeader),
-                nonceBuffer.subarray(0, 4),
-              ])
-            })()
+            this.encryptData(packetData, packetHeader).then(([ciphertext, nonceBuffer]) =>
+              Buffer.concat([packetHeader, ciphertext, nonceBuffer.subarray(0, 4)])
+            )
           )
         }
 
@@ -149,6 +133,14 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
     await this.onFrameSent(packetsSent, bytesSent, frametime)
   }
 
+  protected makeFragmentationUnitHeader(
+    _isFirstPacket: boolean,
+    _isLastPacket: boolean,
+    _naluHeader: Buffer
+  ): Buffer {
+    throw new Error('Not implemented')
+  }
+
   public override async onFrameSent(
     packetsSent: number,
     bytesSent: number,
@@ -157,17 +149,6 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
     await super.onFrameSent(packetsSent, bytesSent, frametime)
     // video RTP packet timestamp incremental value = 90,000Hz / fps
     this.incrementTimestamp((90000 / 1000) * frametime)
-  }
-
-  protected makeFragmentationUnitHeader(
-    isFirstPacket: boolean,
-    isLastPacket: boolean,
-    naluHeader: Buffer
-  ): Buffer {
-    console.log('isFirstPacket', isFirstPacket)
-    console.log('isLastPacket', isLastPacket)
-    console.log('naluHeader', naluHeader)
-    throw new Error('Not implemented')
   }
 }
 

@@ -1,9 +1,6 @@
-import { isIPv4 } from 'node:net'
-import udpCon from 'node:dgram'
-
-import { BaseMediaConnection } from '#src/client/voice/base_media_connection'
-import { MAX_INT32BIT, normalizeVideoCodec, SupportedEncryptionModes } from '#src/utils'
-
+import udpCon from 'dgram'
+import { isIPv4 } from 'net'
+import { BaseMediaConnection } from './base_media_connection.js'
 import {
   AudioPacketizer,
   BaseMediaPacketizer,
@@ -11,6 +8,7 @@ import {
   VideoPacketizerH265,
   VideoPacketizerVP8,
 } from '../packet/index.js'
+import { normalizeVideoCodec } from '../../utils.js'
 
 // credit to discord.js
 function parseLocalPacket(message: Buffer) {
@@ -29,70 +27,36 @@ function parseLocalPacket(message: Buffer) {
 
 export class MediaUdp {
   private readonly _mediaConnection: BaseMediaConnection
-  private _nonce: number
   private _socket: udpCon.Socket | null = null
+  private _ready: boolean = false
+  private _audioPacketizer?: BaseMediaPacketizer
+  private _videoPacketizer?: BaseMediaPacketizer
+  private _ip?: string
+  private _port?: number
 
   constructor(voiceConnection: BaseMediaConnection) {
-    this._nonce = 0
     this._mediaConnection = voiceConnection
   }
-
-  private _ready: boolean = false
-
-  public get ready(): boolean {
-    return this._ready
-  }
-
-  public set ready(val: boolean) {
-    this._ready = val
-  }
-
-  private _audioPacketizer?: BaseMediaPacketizer
 
   public get audioPacketizer(): BaseMediaPacketizer {
     return this._audioPacketizer!
   }
-
-  private _videoPacketizer?: BaseMediaPacketizer
 
   public get videoPacketizer(): BaseMediaPacketizer {
     // This will never be undefined anyway, so it's safe
     return this._videoPacketizer!
   }
 
-  private _encryptionMode: SupportedEncryptionModes | undefined
-
-  public get encryptionMode(): SupportedEncryptionModes | undefined {
-    return this._encryptionMode
+  public get mediaConnection(): BaseMediaConnection {
+    return this._mediaConnection
   }
-
-  public set encryptionMode(mode: SupportedEncryptionModes) {
-    this._encryptionMode = mode
-  }
-
-  private _ip?: string
 
   public get ip() {
     return this._ip
   }
 
-  private _port?: number
-
   public get port() {
     return this._port
-  }
-
-  public get mediaConnection(): BaseMediaConnection {
-    return this._mediaConnection
-  }
-
-  public getNewNonceBuffer(): Buffer {
-    const nonceBuffer =
-      this._encryptionMode === SupportedEncryptionModes.AES256 ? Buffer.alloc(12) : Buffer.alloc(24)
-    this._nonce = (this._nonce + 1) % MAX_INT32BIT
-
-    nonceBuffer.writeUInt32BE(this._nonce, 0)
-    return nonceBuffer
   }
 
   public async sendAudioFrame(frame: Buffer, frametime: number): Promise<void> {
@@ -149,7 +113,15 @@ export class MediaUdp {
   }
 
   handleIncoming(_buf: any): void {
-    // console.log('RECEIVED PACKET', buf)
+    //console.log("RECEIVED PACKET", buf);
+  }
+
+  public get ready(): boolean {
+    return this._ready
+  }
+
+  public set ready(val: boolean) {
+    this._ready = val
   }
 
   public stop(): void {

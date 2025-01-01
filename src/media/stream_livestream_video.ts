@@ -13,6 +13,13 @@ import { demux } from './libav_demuxer.js'
 
 export let command: Ffmpeg.FfmpegCommand = ffmpeg()
 
+/**
+ * @deprecated This API has a number of design issues that makes it error-prone
+ * and hard to customize. Please use the new API instead.
+ *
+ * See https://github.com/gabrielmaialva33/discord-video-stream/ for information
+ * on the new API and example usage.
+ */
 export function streamLivestreamVideo(
   input: string | Readable,
   mediaUdp: MediaUdp,

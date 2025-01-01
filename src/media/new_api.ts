@@ -1,10 +1,11 @@
 import ffmpeg from 'fluent-ffmpeg'
-
 import { PassThrough, type Readable } from 'node:stream'
-import { isFiniteNonZero, SupportedVideoCodec } from '../utils.js'
-import { AVCodecID } from './libav_codec_id.js'
-import { MediaUdp, Streamer } from '../client/index.js'
+
+import type { SupportedVideoCodec } from '../utils.js'
+import type { MediaUdp, Streamer } from '../client/index.js'
+import { isFiniteNonZero } from '../utils.js'
 import { demux } from './libav_demuxer.js'
+import { AVCodecID } from './libav_codec_id.js'
 import { VideoStream } from './video_stream.js'
 import { AudioStream } from './audio_stream.js'
 
@@ -373,9 +374,12 @@ export async function playStream(
     vStream.syncStream = aStream
     aStream.syncStream = vStream
   }
-  vStream.once('finish', () => {
-    stopStream()
-    udp.mediaConnection.setSpeaking(false)
-    udp.mediaConnection.setVideoStatus(false)
+  return new Promise<void>((resolve) => {
+    vStream.once('finish', () => {
+      stopStream()
+      udp.mediaConnection.setSpeaking(false)
+      udp.mediaConnection.setVideoStatus(false)
+      resolve()
+    })
   })
 }

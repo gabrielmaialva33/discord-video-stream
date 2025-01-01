@@ -1,7 +1,6 @@
-import { BaseMediaPacketizer } from '#src/client/packet/base_media_packetizer'
-import { MediaUdp } from '#src/client/voice/media_udp'
-import { extensions, MAX_INT16BIT } from '#src/utils'
-import { CodecPayloadType } from '../voice/index.js'
+import { BaseMediaPacketizer } from './base_media_packetizer.js'
+import { CodecPayloadType, MediaUdp } from '../voice/index.js'
+import { extensions, MAX_INT16BIT } from '../../utils.js'
 
 /**
  * VP8 payload format
@@ -14,6 +13,10 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
     super(connection, CodecPayloadType.VP8.payload_type, true)
     this._pictureId = 0
     this.srInterval = 5 * connection.mediaConnection.streamOptions.fps * 3 // ~5 seconds, assuming ~3 packets per frame
+  }
+
+  private incrementPictureId(): void {
+    this._pictureId = (this._pictureId + 1) % MAX_INT16BIT
   }
 
   public override async sendFrame(frame: Buffer, frametime: number): Promise<void> {
@@ -51,12 +54,8 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
     ])
 
     // nonce buffer used for encryption. 4 bytes are appended to end of packet
-    const nonceBuffer = this.mediaUdp.getNewNonceBuffer()
-    return Buffer.concat([
-      packetHeader,
-      await this.encryptData(packetData, nonceBuffer, packetHeader),
-      nonceBuffer.subarray(0, 4),
-    ])
+    const [ciphertext, nonceBuffer] = await this.encryptData(packetData, packetHeader)
+    return Buffer.concat([packetHeader, ciphertext, nonceBuffer.subarray(0, 4)])
   }
 
   public override async onFrameSent(
@@ -68,10 +67,6 @@ export class VideoPacketizerVP8 extends BaseMediaPacketizer {
     // video RTP packet timestamp incremental value = 90,000Hz / fps
     this.incrementTimestamp((90000 / 1000) * frametime)
     this.incrementPictureId()
-  }
-
-  private incrementPictureId(): void {
-    this._pictureId = (this._pictureId + 1) % MAX_INT16BIT
   }
 
   private makeChunk(frameData: any, isFirstPacket: boolean): Buffer {
