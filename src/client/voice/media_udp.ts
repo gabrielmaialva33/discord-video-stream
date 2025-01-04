@@ -1,5 +1,5 @@
-import udpCon from 'dgram'
-import { isIPv4 } from 'net'
+import udpCon from 'node:dgram'
+import { isIPv4 } from 'node:net'
 import { BaseMediaConnection } from './base_media_connection.js'
 import {
   AudioPacketizer,
