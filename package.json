@@ -66,9 +66,9 @@
     "@adonisjs/prettier-config": "^1.4.0",
     "@adonisjs/tsconfig": "^1.4.0",
     "@types/fluent-ffmpeg": "^2.1.27",
-    "@types/node": "^22.10.5",
+    "@types/node": "^22.10.7",
     "@types/ws": "^8.5.13",
-    "eslint": "^9.17.0",
+    "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3"
   },
