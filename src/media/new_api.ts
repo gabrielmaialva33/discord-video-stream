@@ -2,8 +2,8 @@ import ffmpeg from 'fluent-ffmpeg'
 import { PassThrough, type Readable } from 'node:stream'
 
 import type { SupportedVideoCodec } from '../utils.js'
-import type { MediaUdp, Streamer } from '../client/index.js'
 import { isFiniteNonZero } from '../utils.js'
+import type { MediaUdp, Streamer } from '../client/index.js'
 import { demux } from './libav_demuxer.js'
 import { AVCodecID } from './libav_codec_id.js'
 import { VideoStream } from './video_stream.js'
@@ -79,6 +79,11 @@ export type EncoderOptions = {
    * Custom headers for HTTP requests
    */
   customHeaders: Record<string, string>
+
+  /**
+   * Audio track index
+   */
+  audioTrack?: number
 }
 
 export function prepareStream(input: string | Readable, options: Partial<EncoderOptions> = {}) {
@@ -100,6 +105,7 @@ export function prepareStream(input: string | Readable, options: Partial<Encoder
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.3',
       'Connection': 'keep-alive',
     },
+    audioTrack: 0,
   } satisfies EncoderOptions
 
   function mergeOptions(opts: Partial<EncoderOptions>) {
@@ -143,6 +149,10 @@ export function prepareStream(input: string | Readable, options: Partial<Encoder
         ...defaultOptions.customHeaders,
         ...opts.customHeaders,
       },
+
+      audioTrack: isFiniteNonZero(opts.audioTrack)
+        ? Math.round(opts.audioTrack)
+        : defaultOptions.audioTrack,
     } satisfies EncoderOptions
   }
 
@@ -233,10 +243,10 @@ export function prepareStream(input: string | Readable, options: Partial<Encoder
   }
 
   // audio setup
-  let { includeAudio, bitrateAudio } = mergedOptions
+  let { includeAudio, bitrateAudio, audioTrack } = mergedOptions
   if (includeAudio)
     command
-      .addOutputOption('-map 0:a?')
+      .addOutputOption('-map', `0:a:${audioTrack ?? 0}`)
       .audioChannels(2)
       /*
        * I don't have much surround sound material to test this with,
@@ -345,7 +355,7 @@ export async function playStream(
 
   let udp: MediaUdp
   let stopStream
-  if (mergedOptions.type == 'go-live') {
+  if (mergedOptions.type === 'go-live') {
     udp = await streamer.createStream()
     stopStream = () => streamer.stopStream()
   } else {
