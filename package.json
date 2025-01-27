@@ -66,9 +66,9 @@
     "@adonisjs/prettier-config": "^1.4.0",
     "@adonisjs/tsconfig": "^1.4.0",
     "@types/fluent-ffmpeg": "^2.1.27",
-    "@types/node": "^22.10.7",
-    "@types/ws": "^8.5.13",
-    "eslint": "^9.18.0",
+    "@types/node": "^22.10.10",
+    "@types/ws": "^8.5.14",
+    "eslint": "^9.19.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3"
   },
@@ -76,6 +76,6 @@
     "discord.js-selfbot-v13": "3.x"
   },
   "optionalDependencies": {
-    "@discordjs/opus": "^0.9.0"
+    "@discordjs/opus": "^0.10.0"
   }
 }
