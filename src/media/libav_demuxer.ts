@@ -1,11 +1,11 @@
 import pDebounce from 'p-debounce'
-import { Log } from 'debug-level'
-import { uid } from 'uid'
-import { PassThrough } from 'node:stream'
-import type { Readable } from 'node:stream'
+import {Log} from 'debug-level'
+import {uid} from 'uid'
+import {PassThrough} from 'node:stream'
+import type {Readable} from 'node:stream'
 
 import LibAV from '@libav.js/variant-webcodecs'
-import { AVCodecID } from './libav_codec_id.js'
+import {AVCodecID} from './libav_codec_id.js'
 import {
   H264Helpers,
   H264NalUnitTypes,
@@ -71,7 +71,7 @@ function parseavcC(input: Buffer) {
     pps.push(input.subarray(0, ppsLength))
     input = input.subarray(ppsLength)
   }
-  return { sps, pps }
+  return {sps, pps}
 }
 
 // Parse the hvcC atom, which contains VPS, SPS, PPS
@@ -106,11 +106,11 @@ function parsehvcC(input: Buffer) {
       else if (naluType == H265NalUnitTypes.PPS_NUT) pps.push(nalu)
     }
   }
-  return { vps, sps, pps }
+  return {vps, sps, pps}
 }
 
 function h264AddParamSets(frame: Buffer, paramSets: H264ParamSets) {
-  const { sps, pps } = paramSets
+  const {sps, pps} = paramSets
   const nalus = splitNalu(frame)
   // Technically non-IDR I frames exist ("open GOP"), but they're exceedingly
   // rare in the wild, and no encoder produces it by default
@@ -134,7 +134,7 @@ function h264AddParamSets(frame: Buffer, paramSets: H264ParamSets) {
 }
 
 function h265AddParamSets(frame: Buffer, paramSets: H265ParamSets) {
-  const { vps, sps, pps } = paramSets
+  const {vps, sps, pps} = paramSets
   const nalus = splitNalu(frame)
   // Technically non-IDR I frames exist ("open GOP"), but they're exceedingly
   // rare in the wild, and no encoder produces it by default
@@ -162,7 +162,7 @@ function h265AddParamSets(frame: Buffer, paramSets: H265ParamSets) {
 }
 
 const idToStream = new Map<string, Readable>()
-const libavPromise = LibAV.LibAV({ yesthreads: true })
+const libavPromise = LibAV.LibAV()
 libavPromise.then((libav) => {
   libav.onread = (id) => {
     idToStream.get(id)?.resume()
@@ -210,8 +210,8 @@ export async function demux(input: Readable) {
   const aStream = streams.find((stream) => stream.codec_type == libav.AVMEDIA_TYPE_AUDIO)
   let vInfo: VideoStreamInfo | undefined
   let aInfo: AudioStreamInfo | undefined
-  const vPipe = new PassThrough({ objectMode: true, highWaterMark: 128 })
-  const aPipe = new PassThrough({ objectMode: true, highWaterMark: 128 })
+  const vPipe = new PassThrough({objectMode: true, highWaterMark: 128})
+  const aPipe = new PassThrough({objectMode: true, highWaterMark: 128})
 
   if (vStream) {
     if (!allowedVideoCodec.has(vStream.codec_id)) {
@@ -228,13 +228,13 @@ export async function demux(input: Readable) {
       framerate_den: await libav.AVCodecParameters_framerate_den(vStream.codecpar),
     }
     if (vStream.codec_id == AVCodecID.AV_CODEC_ID_H264) {
-      const { extradata } = await libav.ff_copyout_codecpar(vStream.codecpar)
+      const {extradata} = await libav.ff_copyout_codecpar(vStream.codecpar)
       vInfo = {
         ...vInfo,
         extradata: parseavcC(Buffer.from(extradata!)),
       }
     } else if (vStream.codec_id == AVCodecID.AV_CODEC_ID_H265) {
-      const { extradata } = await libav.ff_copyout_codecpar(vStream.codecpar)
+      const {extradata} = await libav.ff_copyout_codecpar(vStream.codecpar)
       vInfo = {
         ...vInfo,
         extradata: parsehvcC(Buffer.from(extradata!)),
@@ -300,7 +300,7 @@ export async function demux(input: Readable) {
         aPipe.end()
         if (status == LibAV.AVERROR_EOF) loggerFrameCommon.info('Reached end of stream. Stopping')
         else
-          loggerFrameCommon.info({ status }, 'Received an error during frame extraction. Stopping')
+          loggerFrameCommon.info({status}, 'Received an error during frame extraction. Stopping')
         return
       }
       if (!resume) {
@@ -319,7 +319,7 @@ export async function demux(input: Readable) {
   })
   readFrame()
   return {
-    video: vInfo ? { ...vInfo, stream: vPipe as Readable } : undefined,
-    audio: aInfo ? { ...aInfo, stream: aPipe as Readable } : undefined,
+    video: vInfo ? {...vInfo, stream: vPipe as Readable} : undefined,
+    audio: aInfo ? {...aInfo, stream: aPipe as Readable} : undefined,
   }
 }
