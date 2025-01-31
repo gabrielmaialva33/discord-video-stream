@@ -3,16 +3,16 @@ import { VoiceOpCodes } from '#src/client/voice/voice_op_codes'
 
 export class StreamConnection extends BaseMediaConnection {
   private _streamKey: string | null = null
-
-  public get streamKey(): string | null {
-    return this._streamKey
-  }
-
-  public set streamKey(value: string) {
-    this._streamKey = value
-  }
-
   private _serverId: string | null = null
+
+  public override setSpeaking(speaking: boolean): void {
+    if (!this.webRtcParams) throw new Error('WebRTC connection not ready')
+    this.sendOpcode(VoiceOpCodes.SPEAKING, {
+      delay: 0,
+      speaking: speaking ? 2 : 0,
+      ssrc: this.webRtcParams.audioSsrc,
+    })
+  }
 
   public override get serverId(): string | null {
     return this._serverId
@@ -22,11 +22,11 @@ export class StreamConnection extends BaseMediaConnection {
     this._serverId = id
   }
 
-  public override setSpeaking(speaking: boolean): void {
-    this.sendOpcode(VoiceOpCodes.SPEAKING, {
-      delay: 0,
-      speaking: speaking ? 2 : 0,
-      ssrc: this.ssrc,
-    })
+  public get streamKey(): string | null {
+    return this._streamKey
+  }
+
+  public set streamKey(value: string) {
+    this._streamKey = value
   }
 }
