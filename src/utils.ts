@@ -10,7 +10,7 @@ export function normalizeVideoCodec(codec: string): 'H264' | 'H265' | 'VP8' | 'V
 // The server then replies with the ssrc and rtxssrc for each available stream using OpCode Ready (2)
 // RID is used specifically to distinguish between different simulcast streams of the same video source,
 // but we don't really care about sending multiple quality streams, so we hardcode a single one
-export const STREAMS_SIMULCAST = [{ type: 'screen', rid: '100', quality: 100 }]
+export const STREAMS_SIMULCAST = [{type: 'screen', rid: '100', quality: 100}]
 
 export enum SupportedEncryptionModes {
   AES256 = 'aead_aes256_gcm_rtpsize',
@@ -20,11 +20,11 @@ export enum SupportedEncryptionModes {
 export type SupportedVideoCodec = 'H264' | 'H265' | 'VP8' | 'VP9' | 'AV1'
 
 // RTP extensions
-export const extensions = [{ id: 5, len: 2, val: 0 }]
+export const extensions = [{id: 5, len: 2, val: 0}]
 
 export const MAX_INT16BIT = 2 ** 16
 export const MAX_INT32BIT = 2 ** 32
 
 export function isFiniteNonZero(n: number | undefined): n is number {
-  return !!n && isFinite(n)
+  return !!n && Number.isFinite(n)
 }
