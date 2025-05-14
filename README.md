@@ -83,7 +83,22 @@ What I implemented and what I did not.
 - [x] Figure out rtp header extensions (discord specific) (discord seems to use one-byte RTP header
       extension https://www.rfc-editor.org/rfc/rfc8285.html#section-4.2)
 
-Extensions supported by Discord (taken from the webrtc sdp exchange)
+Extensions supported by Discord (taken from the webrtc sdp exchange):
+
+```
+a=extmap:1 urn:ietf:params:rtp-hdrext:ssrc-audio-level
+a=extmap:2 http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time
+a=extmap:3 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01
+a=extmap:4 urn:ietf:params:rtp-hdrext:sdes:mid
+a=extmap:5 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay
+a=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/video-content-type
+a=extmap:7 http://www.webrtc.org/experiments/rtp-hdrext/video-timing
+a=extmap:8 http://www.webrtc.org/experiments/rtp-hdrext/color-space
+a=extmap:10 urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id
+a=extmap:11 urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id
+a=extmap:13 urn:3gpp:video-orientation
+a=extmap:14 urn:ietf:params:rtp-hdrext:toffset
+```
 
 <br>
 
@@ -121,28 +136,134 @@ const streamer = new Streamer(new Client())
 await streamer.client.login('TOKEN HERE')
 ```
 
-Make client join a voice channel and create a stream:
+Make client join a voice channel:
 
 ```typescript
 await streamer.joinVoice('GUILD ID HERE', 'CHANNEL ID HERE')
-const udp = await streamer.createStream()
 ```
 
-Start sending media over the udp connection:
+### Using the new API
+
+The new API provides two main functions: `prepareStream` and `playStream` that make it easier to stream media.
+
+#### Option 1: Stream directly from a URL or file
 
 ```typescript
-udp.mediaConnection.setSpeaking(true)
-udp.mediaConnection.setVideoStatus(true)
-try {
-  const res = await streamLivestreamVideo('DIRECT VIDEO URL OR READABLE STREAM HERE', udp)
+import { prepareStream, playStream } from '@gabrielmaialva33/discord-video-stream'
 
-  console.log('Finished playing video ' + res)
-} catch (e) {
-  console.log(e)
-} finally {
-  udp.mediaConnection.setSpeaking(false)
-  udp.mediaConnection.setVideoStatus(false)
-}
+// Prepare the stream (transcodes video using FFmpeg)
+const { output } = prepareStream('VIDEO_URL_OR_FILE_PATH', {
+  videoCodec: 'H264',     // Supports: 'H264', 'H265', 'VP8', 'VP9', 'AV1'
+  width: 1280,            // Video width (default: -2, maintains aspect ratio)
+  height: 720,            // Video height (default: -2, maintains aspect ratio)
+  bitrateVideo: 5000,     // Video bitrate in kbps
+  includeAudio: true,     // Include audio track
+})
+
+// Play the stream to Discord
+await playStream(output, streamer, {
+  type: 'go-live',        // Stream type: 'go-live' or 'camera'
+  streamPreview: true,    // Enable stream preview thumbnail
+})
+```
+
+#### Option 2: Stream from an existing Readable stream
+
+```typescript
+import { playStream } from '@gabrielmaialva33/discord-video-stream'
+
+// If you already have a properly encoded video stream
+// (e.g., from FFmpeg or another source)
+const videoStream = getVideoStreamFromSomewhere()
+
+await playStream(videoStream, streamer, {
+  type: 'go-live'         // 'go-live' for screen sharing or 'camera' for webcam
+})
+```
+
+#### Available Configuration Options
+
+##### `prepareStream` Options
+
+```typescript
+// Advanced stream preparation options
+const { output } = prepareStream(inputStream, {
+  // Disable video transcoding. If true, all video-related settings below
+  // have no effect, and the input stream is used as-is.
+  // Only use this if your video is already Discord-friendly!
+  noTranscoding: false,           
+  
+  // Video dimensions
+  width: 1280,                    // Output width (use -2 to maintain aspect ratio)
+  height: 720,                    // Output height (use -2 to maintain aspect ratio)
+  frameRate: 30,                  // Target frame rate
+  
+  // Bitrate settings
+  bitrateVideo: 5000,             // Video average bitrate in kbps
+  bitrateVideoMax: 7000,          // Video maximum bitrate in kbps
+  bitrateAudio: 128,              // Audio bitrate in kbps
+  
+  // Video codec (one of: 'H264', 'H265', 'VP8', 'VP9', 'AV1')
+  videoCodec: 'H264',             
+  
+  // Performance options
+  includeAudio: true,             // Enable audio output
+  hardwareAcceleratedDecoding: true, // Use hardware acceleration for decoding
+  minimizeLatency: true,          // Optimize for low latency
+  
+  // H264/H265 encoding preset (faster = lower quality)
+  // ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo
+  h26xPreset: 'ultrafast',
+
+  // HTTP request customization
+  customHeaders: {                // Custom headers for HTTP requests
+    'User-Agent': '...',
+    'Connection': 'keep-alive'
+  },
+  
+  // Advanced options
+  customFfmpegFlags: [],          // Additional FFmpeg command line flags
+})
+```
+
+##### `playStream` Options
+
+```typescript
+// Streaming options
+await playStream(videoStream, streamer, {
+  // Stream type: 'go-live' (screen sharing) or 'camera' (webcam video)
+  type: 'go-live',
+  
+  // These parameters override the video properties sent to Discord
+  // DO NOT SPECIFY UNLESS YOU KNOW WHAT YOU'RE DOING!
+  width: 1280,                    // Override video width 
+  height: 720,                    // Override video height
+  frameRate: 30,                  // Override frame rate
+  
+  // Initial burst settings (reduces initial buffering)
+  // Same as ffmpeg's readrate_initial_burst flag
+  // See: https://ffmpeg.org/ffmpeg.html#:~:text=%2Dreadrate_initial_burst
+  readrateInitialBurst: 5,        // Seconds of video to buffer initially
+  
+  // Enable stream preview thumbnail in Discord
+  streamPreview: true,            // Show preview of the stream in Discord UI
+})
+```
+
+##### `Streamer` Options
+
+```typescript
+// These control internal operations of the library and can be configured 
+// through the opts property on the Streamer class
+const streamer = new Streamer(client, {
+  // Enables sending RTCP sender reports to help the receiver synchronize 
+  // audio/video frames. Can be disabled in certain edge cases.
+  rtcpSenderReportEnabled: true,
+  
+  // Encryption options - ChaCha20-Poly1305 is faster than AES-256-GCM,
+  // except when using hardware-accelerated AES-NI
+  forceChacha20Encryption: false
+})
 ```
 
 <br>
@@ -171,7 +292,7 @@ This project is under the **MIT** license. [MIT](./LICENSE) ❤️
 ## :rocket: **Contributors**
 
 | [![Maia](https://avatars.githubusercontent.com/u/26732067?size=100)](https://github.com/gabrielmaialva33) |
-| --------------------------------------------------------------------------------------------------------- |
+|-----------------------------------------------------------------------------------------------------------|
 | [Maia](https://github.com/gabrielmaialva33)                                                               |
 
 ### Special Thanks
