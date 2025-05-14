@@ -3,16 +3,15 @@ import { MediaUdp } from '#src/client/voice/media_udp'
 import { CodecPayloadType } from '../voice/index.js'
 
 export class AudioPacketizer extends BaseMediaPacketizer {
-  constructor(connection: MediaUdp) {
-    super(connection, CodecPayloadType.opus.payload_type)
-    this.srInterval = (5 * 1000) / 20 // ~5 seconds for 20ms frame time
+  constructor(connection: MediaUdp, ssrc: number) {
+    super(connection, ssrc, CodecPayloadType.opus.payload_type)
   }
 
-  public override async sendFrame(frame: Buffer, frameTime: number): Promise<void> {
-    super.sendFrame(frame, frameTime)
+  public override async sendFrame(frame: Buffer, frametime: number): Promise<void> {
+    super.sendFrame(frame, frametime)
     const packet = await this.createPacket(frame)
     this.mediaUdp.sendPacket(packet)
-    this.onFrameSent(packet.length, frameTime)
+    this.onFrameSent(packet.length, frametime)
   }
 
   public async createPacket(chunk: Buffer): Promise<Buffer> {

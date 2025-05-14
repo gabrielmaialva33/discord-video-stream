@@ -55,9 +55,13 @@ import { extensions } from '../../utils.js'
 class VideoPacketizerAnnexB extends BaseMediaPacketizer {
   private _nalFunctions: AnnexBHelpers
 
-  constructor(connection: MediaUdp, payloadType: number, nalFunctions: AnnexBHelpers) {
-    super(connection, payloadType, true)
-    this.srInterval = 5 * connection.mediaConnection.streamOptions.fps * 3 // ~5 seconds, assuming ~3 packets per frame
+  constructor(
+    connection: MediaUdp,
+    ssrc: number,
+    payloadType: number,
+    nalFunctions: AnnexBHelpers
+  ) {
+    super(connection, ssrc, payloadType, true)
     this._nalFunctions = nalFunctions
   }
 
@@ -153,8 +157,8 @@ class VideoPacketizerAnnexB extends BaseMediaPacketizer {
 }
 
 export class VideoPacketizerH264 extends VideoPacketizerAnnexB {
-  constructor(connection: MediaUdp) {
-    super(connection, CodecPayloadType.H264.payload_type, H264Helpers)
+  constructor(connection: MediaUdp, ssrc: number) {
+    super(connection, ssrc, CodecPayloadType.H264.payload_type, H264Helpers)
   }
 
   /**
@@ -214,8 +218,8 @@ export class VideoPacketizerH264 extends VideoPacketizerAnnexB {
 }
 
 export class VideoPacketizerH265 extends VideoPacketizerAnnexB {
-  constructor(connection: MediaUdp) {
-    super(connection, CodecPayloadType.H265.payload_type, H265Helpers)
+  constructor(connection: MediaUdp, ssrc: number) {
+    super(connection, ssrc, CodecPayloadType.H265.payload_type, H265Helpers)
   }
 
   /**

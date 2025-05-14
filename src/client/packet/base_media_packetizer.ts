@@ -1,13 +1,14 @@
 import { Log } from 'debug-level'
+
 import { MediaUdp } from '../voice/index.js'
-import { MAX_INT32BIT } from '../../utils.js'
+import { MAX_INT16BIT, MAX_INT32BIT } from '../../utils.js'
 
 const ntpEpoch = new Date('Jan 01 1900 GMT').getTime()
 
 export class BaseMediaPacketizer {
   private _loggerRtcpSr = new Log('packetizer:rtcp-sr')
 
-  private _ssrc?: number
+  private _ssrc: number
   private readonly _payloadType: number
   private readonly _mtu: number
   private _sequence: number
@@ -15,26 +16,29 @@ export class BaseMediaPacketizer {
 
   private _totalBytes: number
   private _totalPackets: number
-  private _prevTotalPackets: number
   private _lastPacketTime: number
+  private _lastRtcpTime: number
+  private _currentMediaTimestamp: number
   private _srInterval: number
 
   private readonly _mediaUdp: MediaUdp
   private readonly _extensionEnabled: boolean
 
-  constructor(connection: MediaUdp, payloadType: number, extensionEnabled = false) {
+  constructor(connection: MediaUdp, ssrc: number, payloadType: number, extensionEnabled = false) {
     this._mediaUdp = connection
     this._payloadType = payloadType
+    this._ssrc = ssrc
     this._sequence = 0
     this._timestamp = 0
     this._totalBytes = 0
     this._totalPackets = 0
-    this._prevTotalPackets = 0
     this._lastPacketTime = 0
+    this._lastRtcpTime = 0
+    this._currentMediaTimestamp = 0
     this._mtu = 1200
     this._extensionEnabled = extensionEnabled
 
-    this._srInterval = 512 // Sane fallback value for interval
+    this._srInterval = 1000
   }
 
   public get ssrc(): number | undefined {
@@ -43,12 +47,11 @@ export class BaseMediaPacketizer {
 
   public set ssrc(value: number) {
     this._ssrc = value
-    this._totalBytes = this._totalPackets = this._prevTotalPackets = 0
+    this._totalBytes = this._totalPackets = 0
   }
 
   /**
-   * The interval (number of packets) between 2 consecutive RTCP Sender
-   * Report packets
+   * The interval between 2 consecutive RTCP Sender Report packets in ms
    */
   public get srInterval(): number {
     return this._srInterval
@@ -66,35 +69,38 @@ export class BaseMediaPacketizer {
   public async onFrameSent(
     packetsSent: number,
     bytesSent: number,
-    _frametime: number
+    frametime: number
   ): Promise<void> {
-    if (!this._mediaUdp.mediaConnection.streamOptions.rtcpSenderReportEnabled) return
+    if (this._mediaUdp.mediaConnection.streamer.opts.rtcpSenderReportEnabled) {
+      this._totalPackets = this._totalPackets + packetsSent
+      this._totalBytes = (this._totalBytes + bytesSent) % MAX_INT32BIT
 
-    this._totalPackets = this._totalPackets + packetsSent
-    this._totalBytes = (this._totalBytes + bytesSent) % MAX_INT32BIT
-
-    // Not using modulo here, since the number of packet sent might not be
-    // exactly a multiple of the interval
-    if (
-      Math.floor(this._totalPackets / this._srInterval) -
-        Math.floor(this._prevTotalPackets / this._srInterval) >
-      0
-    ) {
-      const senderReport = await this.makeRtcpSenderReport()
-      this._mediaUdp.sendPacket(senderReport)
-      this._prevTotalPackets = this._totalPackets
-      this._loggerRtcpSr.debug(
-        {
-          stats: {
-            ssrc: this._ssrc,
-            timestamp: this._timestamp,
-            totalPackets: this._totalPackets,
-            totalBytes: this._totalBytes,
+      /**
+       * Not using modulo here, since the timestamp might not be an exact
+       * multiple of the interval
+       */
+      if (
+        Math.floor(this._currentMediaTimestamp / this._srInterval) -
+          Math.floor(this._lastRtcpTime / this._srInterval) >
+        0
+      ) {
+        const senderReport = await this.makeRtcpSenderReport()
+        this._mediaUdp.sendPacket(senderReport)
+        this._lastRtcpTime = this._currentMediaTimestamp
+        this._loggerRtcpSr.debug(
+          {
+            stats: {
+              ssrc: this._ssrc,
+              timestamp: this._timestamp,
+              totalPackets: this._totalPackets,
+              totalBytes: this._totalBytes,
+            },
           },
-        },
-        `Sent RTCP sender report for SSRC ${this._ssrc}`
-      )
+          `Sent RTCP sender report for SSRC ${this._ssrc}`
+        )
+      }
     }
+    this._currentMediaTimestamp += frametime
   }
 
   /**
@@ -119,7 +125,7 @@ export class BaseMediaPacketizer {
   }
 
   public getNewSequence(): number {
-    this._sequence = (this._sequence + 1) % MAX_INT32BIT
+    this._sequence = (this._sequence + 1) % MAX_INT16BIT
     return this._sequence
   }
 
@@ -127,30 +133,20 @@ export class BaseMediaPacketizer {
     this._timestamp = (this._timestamp + incrementBy) % MAX_INT32BIT
   }
 
-  public makeRtpHeader(isLastPacket: boolean = true): Buffer {
-    if (!this._ssrc) throw new Error('SSRC is not set')
-
+  public makeRtpHeader(isLastPacket = true): Buffer {
     const packetHeader = Buffer.alloc(12)
 
     packetHeader[0] = (2 << 6) | ((this._extensionEnabled ? 1 : 0) << 4) // set version and flags
     packetHeader[1] = this._payloadType // set packet payload
     if (isLastPacket) packetHeader[1] |= 0b10000000 // mark M bit if last frame
 
-    // Ensure the sequence is within the valid range for 16 bits
-    const sequence = this.getNewSequence() % 0x10000
-    if (sequence < 0 || sequence > 0xffff) {
-      throw new RangeError(`Sequence out of range: ${sequence}`)
-    }
-
-    packetHeader.writeUInt16BE(sequence, 2) // Write the 16-bit sequence number
-    packetHeader.writeUInt32BE(this._timestamp, 4) // Write the 32-bit timestamp
-    packetHeader.writeUInt32BE(this._ssrc, 8) // Write the 32-bit SSRC
+    packetHeader.writeUIntBE(this.getNewSequence(), 2, 2)
+    packetHeader.writeUIntBE(this._timestamp, 4, 4)
+    packetHeader.writeUIntBE(this._ssrc, 8, 4)
     return packetHeader
   }
 
   public async makeRtcpSenderReport(): Promise<Buffer> {
-    if (!this._ssrc) throw new Error('SSRC is not set')
-
     const packetHeader = Buffer.allocUnsafe(8)
 
     packetHeader[0] = 0x80 // RFC1889 v2, no padding, no reception report count
@@ -207,7 +203,7 @@ export class BaseMediaPacketizer {
    */
   public createExtensionPayload(extensions: { id: number; len: number; val: number }[]): Buffer {
     const extensionsData = []
-    for (let ext of extensions) {
+    for (const ext of extensions) {
       /**
        * EXTENSION DATA - each extension payload is 32 bits
        */
