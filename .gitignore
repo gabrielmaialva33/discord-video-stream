@@ -1,9 +1,10 @@
 node_modules
 dist
-dist
 package-lock.json
+pnpm-lock.yaml
 examples/*/node_modules
 examples/*/dist
 .DS_Store
 .idea
+
 
