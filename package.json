@@ -34,7 +34,8 @@
     "#src/util/*": "./dist/src/util/*.js"
   },
   "engines": {
-    "node": ">=22.13.1"
+    "node": ">=22.13.1",
+    "pnpm": ">=3"
   },
   "scripts": {
     "build": "tsc",
