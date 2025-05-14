@@ -4,7 +4,7 @@ import { MediaUdp } from '../client/index.js'
 export class VideoStream extends BaseMediaStream {
   public udp: MediaUdp
 
-  constructor(udp: MediaUdp, noSleep: boolean = false) {
+  constructor(udp: MediaUdp, noSleep = false) {
     super('video', noSleep)
     this.udp = udp
   }

@@ -1,10 +1,9 @@
 import pDebounce from 'p-debounce'
 import { Log } from 'debug-level'
 import { uid } from 'uid'
-import { PassThrough } from 'node:stream'
 import type { Readable } from 'node:stream'
+import { PassThrough } from 'node:stream'
 
-import LibAV from '@libav.js/variant-webcodecs'
 import { AVCodecID } from './libav_codec_id.js'
 import {
   H264Helpers,
@@ -14,10 +13,12 @@ import {
   mergeNalu,
   splitNalu,
 } from '../client/processing/annex_bhelper.js'
+import LibAV, { CodecParameters } from '@lng2004/libav.js-variant-webcodecs-avf-with-decoders'
 
 type MediaStreamInfoCommon = {
   index: number
   codec: AVCodecID
+  codecpar: CodecParameters
 }
 type VideoStreamInfo = MediaStreamInfoCommon & {
   width: number
@@ -45,65 +46,67 @@ const allowedAudioCodec = new Set([AVCodecID.AV_CODEC_ID_OPUS])
 
 // Parse the avcC atom, which contains SPS and PPS
 function parseavcC(input: Buffer) {
-  if (input[0] != 1) throw new Error('Only configurationVersion 1 is supported')
+  let buf = input
+  if (buf[0] !== 1) throw new Error('Only configurationVersion 1 is supported')
   // Skip a bunch of stuff we don't care about
-  input = input.subarray(5)
+  buf = buf.subarray(5)
 
   const sps: Buffer[] = []
   const pps: Buffer[] = []
 
   // Read the SPS
-  const spsCount = input[0] & 0b11111
-  input = input.subarray(1)
+  const spsCount = buf[0] & 0b11111
+  buf = buf.subarray(1)
   for (let i = 0; i < spsCount; ++i) {
-    const spsLength = input.readUInt16BE()
-    input = input.subarray(2)
-    sps.push(input.subarray(0, spsLength))
-    input = input.subarray(spsLength)
+    const spsLength = buf.readUInt16BE()
+    buf = buf.subarray(2)
+    sps.push(buf.subarray(0, spsLength))
+    buf = buf.subarray(spsLength)
   }
 
   // Read the PPS
-  const ppsCount = input[0]
-  input = input.subarray(1)
+  const ppsCount = buf[0]
+  buf = buf.subarray(1)
   for (let i = 0; i < ppsCount; ++i) {
-    const ppsLength = input.readUInt16BE()
-    input = input.subarray(2)
-    pps.push(input.subarray(0, ppsLength))
-    input = input.subarray(ppsLength)
+    const ppsLength = buf.readUInt16BE()
+    buf = buf.subarray(2)
+    pps.push(buf.subarray(0, ppsLength))
+    buf = buf.subarray(ppsLength)
   }
   return { sps, pps }
 }
 
 // Parse the hvcC atom, which contains VPS, SPS, PPS
 function parsehvcC(input: Buffer) {
-  if (input[0] != 1) throw new Error('Only configurationVersion 1 is supported')
+  let buf = input
+  if (buf[0] !== 1) throw new Error('Only configurationVersion 1 is supported')
   // Skip a bunch of stuff we don't care about
-  input = input.subarray(22)
+  buf = buf.subarray(22)
 
   const vps: Buffer[] = []
   const sps: Buffer[] = []
   const pps: Buffer[] = []
 
-  const numOfArrays = input[0]
-  input = input.subarray(1)
+  const numOfArrays = buf[0]
+  buf = buf.subarray(1)
 
   for (let i = 0; i < numOfArrays; ++i) {
-    const naluType = input[0] & 0b111111
-    input = input.subarray(1)
+    const naluType = buf[0] & 0b111111
+    buf = buf.subarray(1)
 
-    const naluCount = input.readUInt16BE()
-    input = input.subarray(2)
+    const naluCount = buf.readUInt16BE()
+    buf = buf.subarray(2)
 
     for (let j = 0; j < naluCount; ++j) {
-      const naluLength = input.readUInt16BE()
-      input = input.subarray(2)
+      const naluLength = buf.readUInt16BE()
+      buf = buf.subarray(2)
 
-      const nalu = input.subarray(0, naluLength)
-      input = input.subarray(naluLength)
+      const nalu = buf.subarray(0, naluLength)
+      buf = buf.subarray(naluLength)
 
-      if (naluType == H265NalUnitTypes.VPS_NUT) vps.push(nalu)
-      else if (naluType == H265NalUnitTypes.SPS_NUT) sps.push(nalu)
-      else if (naluType == H265NalUnitTypes.PPS_NUT) pps.push(nalu)
+      if (naluType === H265NalUnitTypes.VPS_NUT) vps.push(nalu)
+      else if (naluType === H265NalUnitTypes.SPS_NUT) sps.push(nalu)
+      else if (naluType === H265NalUnitTypes.PPS_NUT) pps.push(nalu)
     }
   }
   return { vps, sps, pps }
@@ -119,9 +122,9 @@ function h264AddParamSets(frame: Buffer, paramSets: H264ParamSets) {
   let hasPPS = false
   for (const nalu of nalus) {
     const naluType = H264Helpers.getUnitType(nalu)
-    if (naluType == H264NalUnitTypes.CodedSliceIdr) isIDR = true
-    else if (naluType == H264NalUnitTypes.SPS) hasSPS = true
-    else if (naluType == H264NalUnitTypes.PPS) hasPPS = true
+    if (naluType === H264NalUnitTypes.CodedSliceIdr) isIDR = true
+    else if (naluType === H264NalUnitTypes.SPS) hasSPS = true
+    else if (naluType === H264NalUnitTypes.PPS) hasPPS = true
   }
   if (!isIDR) {
     // Not an IDR, return as is
@@ -144,11 +147,11 @@ function h265AddParamSets(frame: Buffer, paramSets: H265ParamSets) {
   let hasPPS = false
   for (const nalu of nalus) {
     const naluType = H265Helpers.getUnitType(nalu)
-    if (naluType == H265NalUnitTypes.IDR_N_LP || naluType == H265NalUnitTypes.IDR_W_RADL)
+    if (naluType === H265NalUnitTypes.IDR_N_LP || naluType === H265NalUnitTypes.IDR_W_RADL)
       isIDR = true
-    else if (naluType == H265NalUnitTypes.VPS_NUT) hasVPS = true
-    else if (naluType == H265NalUnitTypes.SPS_NUT) hasSPS = true
-    else if (naluType == H265NalUnitTypes.PPS_NUT) hasPPS = true
+    else if (naluType === H265NalUnitTypes.VPS_NUT) hasVPS = true
+    else if (naluType === H265NalUnitTypes.SPS_NUT) hasSPS = true
+    else if (naluType === H265NalUnitTypes.PPS_NUT) hasPPS = true
   }
   if (!isIDR) {
     // Not an IDR, return as is
@@ -162,21 +165,21 @@ function h265AddParamSets(frame: Buffer, paramSets: H265ParamSets) {
 }
 
 const idToStream = new Map<string, Readable>()
-const libavPromise = LibAV.LibAV()
-libavPromise.then((libav) => {
+const libavInstance = LibAV.LibAV()
+libavInstance.then((libav) => {
   libav.onread = (id) => {
     idToStream.get(id)?.resume()
   }
 })
 
-export async function demux(input: Readable) {
+export async function demux(input: Readable, _cancelSignal?: AbortSignal) {
   const loggerInput = new Log('demux:input')
   const loggerFormat = new Log('demux:format')
   const loggerFrameCommon = new Log('demux:frame:common')
   const loggerFrameVideo = new Log('demux:frame:video')
   const loggerFrameAudio = new Log('demux:frame:audio')
 
-  const libav = await libavPromise
+  const libav = await libavInstance
   const filename = uid()
   await libav.mkreaderdev(filename)
   idToStream.set(filename, input)
@@ -206,8 +209,8 @@ export async function demux(input: Readable) {
     libav.unlink(filename)
   }
 
-  const vStream = streams.find((stream) => stream.codec_type == libav.AVMEDIA_TYPE_VIDEO)
-  const aStream = streams.find((stream) => stream.codec_type == libav.AVMEDIA_TYPE_AUDIO)
+  const vStream = streams.find((stream) => stream.codec_type === libav.AVMEDIA_TYPE_VIDEO)
+  const aStream = streams.find((stream) => stream.codec_type === libav.AVMEDIA_TYPE_AUDIO)
   let vInfo: VideoStreamInfo | undefined
   let aInfo: AudioStreamInfo | undefined
   const vPipe = new PassThrough({ objectMode: true, highWaterMark: 128 })
@@ -219,24 +222,28 @@ export async function demux(input: Readable) {
       cleanup()
       throw new Error(`Video codec ${codecName} is not allowed`)
     }
+    const codecpar = await libav.ff_copyout_codecpar(vStream.codecpar)
     vInfo = {
       index: vStream.index,
       codec: vStream.codec_id,
-      width: await libav.AVCodecParameters_width(vStream.codecpar),
-      height: await libav.AVCodecParameters_height(vStream.codecpar),
+      codecpar,
+      width: codecpar.width ?? 0,
+      height: codecpar.height ?? 0,
       framerate_num: await libav.AVCodecParameters_framerate_num(vStream.codecpar),
       framerate_den: await libav.AVCodecParameters_framerate_den(vStream.codecpar),
     }
-    if (vStream.codec_id == AVCodecID.AV_CODEC_ID_H264) {
-      const { extradata } = await libav.ff_copyout_codecpar(vStream.codecpar)
+    if (vStream.codec_id === AVCodecID.AV_CODEC_ID_H264) {
+      const { extradata } = codecpar
       vInfo = {
         ...vInfo,
+        // biome-ignore lint/style/noNonNullAssertion: will always be non-null for our use case
         extradata: parseavcC(Buffer.from(extradata!)),
       }
-    } else if (vStream.codec_id == AVCodecID.AV_CODEC_ID_H265) {
-      const { extradata } = await libav.ff_copyout_codecpar(vStream.codecpar)
+    } else if (vStream.codec_id === AVCodecID.AV_CODEC_ID_H265) {
+      const { extradata } = codecpar
       vInfo = {
         ...vInfo,
+        // biome-ignore lint/style/noNonNullAssertion: will always be non-null for our use case
         extradata: parsehvcC(Buffer.from(extradata!)),
       }
     }
@@ -253,10 +260,12 @@ export async function demux(input: Readable) {
       cleanup()
       throw new Error(`Audio codec ${codecName} is not allowed`)
     }
+    const codecpar = await libav.ff_copyout_codecpar(aStream.codecpar)
     aInfo = {
       index: aStream.index,
       codec: aStream.codec_id,
-      sample_rate: await libav.AVCodecParameters_sample_rate(aStream.codecpar),
+      codecpar,
+      sample_rate: codecpar.sample_rate ?? 0,
     }
     loggerFormat.info(
       {
@@ -269,20 +278,22 @@ export async function demux(input: Readable) {
   const readFrame = pDebounce.promise(async () => {
     let resume = true
     while (resume) {
-      const [status, streams] = await libav.ff_read_frame_multi(fmt_ctx, pkt, {
+      const [status, streams_ff] = await libav.ff_read_frame_multi(fmt_ctx, pkt, {
         limit: 1,
         unify: true,
       })
-      for (const packet of streams[0] ?? []) {
+      for (const packet of streams_ff[0] ?? []) {
         if (vInfo && vInfo.index === packet.stream_index) {
           if (vInfo.codec === AVCodecID.AV_CODEC_ID_H264) {
             packet.data = h264AddParamSets(
               Buffer.from(packet.data),
+              // biome-ignore lint/style/noNonNullAssertion: will always be non-null for our use case
               vInfo.extradata! as H264ParamSets
             )
           } else if (vInfo.codec === AVCodecID.AV_CODEC_ID_H265) {
             packet.data = h265AddParamSets(
               Buffer.from(packet.data),
+              // biome-ignore lint/style/noNonNullAssertion: will always be non-null for our use case
               vInfo.extradata! as H265ParamSets
             )
           }
@@ -293,12 +304,12 @@ export async function demux(input: Readable) {
           loggerFrameAudio.trace('Pushed a frame into the audio pipe')
         }
       }
-      if (status < 0 && status != -libav.EAGAIN) {
+      if (status < 0 && status !== -libav.EAGAIN) {
         // End of file, or some error happened
         cleanup()
         vPipe.end()
         aPipe.end()
-        if (status == LibAV.AVERROR_EOF) loggerFrameCommon.info('Reached end of stream. Stopping')
+        if (status === LibAV.AVERROR_EOF) loggerFrameCommon.info('Reached end of stream. Stopping')
         else
           loggerFrameCommon.info({ status }, 'Received an error during frame extraction. Stopping')
         return

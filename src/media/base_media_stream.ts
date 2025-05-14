@@ -2,7 +2,7 @@ import { setTimeout } from 'node:timers/promises'
 import { Writable } from 'node:stream'
 
 import { Log } from 'debug-level'
-import type { Packet } from '@libav.js/variant-webcodecs'
+import type { Packet } from '@lng2004/libav.js-variant-webcodecs-avf-with-decoders'
 
 import { combineLoHi } from './utils.js'
 
