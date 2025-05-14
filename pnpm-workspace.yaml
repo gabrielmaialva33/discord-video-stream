@@ -1,0 +1,5 @@
+onlyBuiltDependencies:
+  - '@discordjs/opus'
+  - prettier-edgejs
+  - sharp
+  - sodium-native
